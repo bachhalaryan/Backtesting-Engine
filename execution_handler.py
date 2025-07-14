@@ -1,5 +1,32 @@
 from events import FillEvent, OrderEvent
 
+class CommissionCalculator:
+    """
+    Base class for commission calculation strategies.
+    """
+    def calculate_commission(self, quantity, fill_cost):
+        raise NotImplementedError("Should implement calculate_commission()")
+
+class FixedCommissionCalculator(CommissionCalculator):
+    """
+    Calculates commission based on a fixed rate per share with a minimum.
+    Example: Interactive Brokers-style commission ($0.0035 per share, min $0.35).
+    """
+    def __init__(self, rate_per_share=0.0035, min_commission=0.35, max_commission_pct=0.01):
+        self.rate_per_share = rate_per_share
+        self.min_commission = min_commission
+        self.max_commission_pct = max_commission_pct
+
+    def calculate_commission(self, quantity, fill_cost):
+        commission = self.rate_per_share * quantity
+        if commission < self.min_commission:
+            commission = self.min_commission
+        
+        max_commission_based_on_value = self.max_commission_pct * fill_cost
+        if commission > max_commission_based_on_value:
+            commission = max_commission_based_on_value
+        return commission
+
 class ExecutionHandler:
     """
     The ExecutionHandler abstract base class handles the interaction
@@ -15,13 +42,14 @@ class SimulatedExecutionHandler(ExecutionHandler):
     This is to ensure that it has access to the latest bars and can
     appropriately simulate the fill of orders.
     """
-    def __init__(self, events, bars, slippage_bps=0, partial_fill_volume_pct=1.0):
+    def __init__(self, events, bars, slippage_bps=0, partial_fill_volume_pct=1.0, commission_calculator=None):
         self.events = events
         self.bars = bars
         self.orders = {}
         self.order_id = 0
         self.slippage_bps = slippage_bps
         self.partial_fill_volume_pct = partial_fill_volume_pct
+        self.commission_calculator = commission_calculator if commission_calculator is not None else FixedCommissionCalculator()
 
     def _apply_slippage(self, price, direction):
         if self.slippage_bps == 0:
@@ -129,7 +157,8 @@ class SimulatedExecutionHandler(ExecutionHandler):
         partial_fill = fill_quantity < remaining_quantity
 
         fill_cost = fill_price * fill_quantity
-        return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, order_id=order_id, partial_fill=partial_fill)
+        commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
+        return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
 
     def _fill_limit_order(self, order_id, order, bar, remaining_quantity):
         """
@@ -144,7 +173,8 @@ class SimulatedExecutionHandler(ExecutionHandler):
                 fill_quantity = min(remaining_quantity, max_fill_quantity)
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
-                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, order_id=order_id, partial_fill=partial_fill)
+                commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
+                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
         elif order.direction == 'SELL':
             if bar[1]['open'] >= order.limit_price:
                 fill_price = bar[1]['open']
@@ -152,14 +182,16 @@ class SimulatedExecutionHandler(ExecutionHandler):
                 fill_quantity = min(remaining_quantity, max_fill_quantity)
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
-                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, order_id=order_id, partial_fill=partial_fill)
+                commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
+                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
             elif bar[1]['high'] >= order.limit_price:
                 fill_price = order.limit_price
                 fill_price = self._apply_slippage(fill_price, order.direction)
                 fill_quantity = min(remaining_quantity, max_fill_quantity)
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
-                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, order_id=order_id, partial_fill=partial_fill)
+                commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
+                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
         return None
 
     def _fill_stop_order(self, order_id, order, bar, remaining_quantity):
@@ -179,7 +211,8 @@ class SimulatedExecutionHandler(ExecutionHandler):
                 fill_quantity = min(remaining_quantity, max_fill_quantity)
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
-                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, order_id=order_id, partial_fill=partial_fill)
+                commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
+                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
         elif order.direction == 'SELL':
             if bar[1]['low'] <= order.stop_price:
                 fill_price = order.stop_price
@@ -191,7 +224,8 @@ class SimulatedExecutionHandler(ExecutionHandler):
                 fill_quantity = min(remaining_quantity, max_fill_quantity)
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
-                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, order_id=order_id, partial_fill=partial_fill)
+                commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
+                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
         return None
 
     def _fill_stop_limit_order(self, order_id, order, bar, remaining_quantity):
@@ -209,7 +243,8 @@ class SimulatedExecutionHandler(ExecutionHandler):
                     fill_quantity = min(remaining_quantity, max_fill_quantity)
                     partial_fill = fill_quantity < remaining_quantity
                     fill_cost = fill_price * fill_quantity
-                    return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, order_id=order_id, partial_fill=partial_fill)
+                    commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
+                    return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
         elif order.direction == 'SELL':
             if bar[1]['low'] <= order.stop_price:
                 # Stop triggered, now check limit condition
@@ -219,7 +254,8 @@ class SimulatedExecutionHandler(ExecutionHandler):
                     fill_quantity = min(remaining_quantity, max_fill_quantity)
                     partial_fill = fill_quantity < remaining_quantity
                     fill_cost = fill_price * fill_quantity
-                    return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, order_id=order_id, partial_fill=partial_fill)
+                    commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
+                    return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
         return None
 
     def _fill_trailing_stop_order(self, order_id, order, bar, remaining_quantity):
@@ -243,7 +279,8 @@ class SimulatedExecutionHandler(ExecutionHandler):
                 fill_quantity = min(remaining_quantity, max_fill_quantity)
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
-                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, order_id=order_id, partial_fill=partial_fill)
+                commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
+                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
         elif order.direction == 'SELL':
             # Update lowest price seen
             order.lowest_price_seen = min(order.lowest_price_seen, bar[1]['low'])
@@ -259,5 +296,6 @@ class SimulatedExecutionHandler(ExecutionHandler):
                 fill_quantity = min(remaining_quantity, max_fill_quantity)
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
-                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, order_id=order_id, partial_fill=partial_fill)
+                commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
+                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
         return None

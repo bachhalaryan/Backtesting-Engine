@@ -1,11 +1,12 @@
 import datetime
 import queue
 import os
+from event_bus import EventBus
 
 from data_handler import CSVDataHandler
 from strategy import BuyAndHoldStrategy
 from portfolio import Portfolio
-from execution_handler import SimulatedExecutionHandler
+from execution_handler import SimulatedExecutionHandler, FixedCommissionCalculator
 from events import MarketEvent, SignalEvent, OrderEvent, FillEvent
 from performance_analyzer import PerformanceAnalyzer
 from backtest_manager import BacktestManager
@@ -28,7 +29,7 @@ class Backtester:
         self.portfolio_cls = portfolio
         self.strategy_cls = strategy
 
-        self.events = queue.Queue()
+        self.events = EventBus()
         self.signals = 0
         self.orders = 0
         self.fills = 0
@@ -48,7 +49,7 @@ class Backtester:
                                            self.events, 
                                            self.start_date, 
                                            self.initial_capital)
-        self.execution_handler = self.execution_handler_cls(self.events, self.data_handler)
+        self.execution_handler = self.execution_handler_cls(self.events, self.data_handler, commission_calculator=FixedCommissionCalculator())
         self.strategy = self.strategy_cls(self.symbol_list[0], 
                                           self.events, 
                                           self.data_handler, 
@@ -76,24 +77,27 @@ class Backtester:
                     break
                 else:
                     if event is not None:
-                        if event.type == 'MARKET':
-                            self.current_market_event = event
-                            self.strategy.calculate_signals(event)
-                            self.portfolio.update_timeindex(event)
-                            self.execution_handler.update(event)
-                        elif event.type == 'SIGNAL':
-                            self.signals += 1
-                            self.portfolio.update_signal(event)
-                        elif event.type == 'ORDER':
-                            self.orders += 1
-                            self.execution_handler.execute_order(event)
-                            if event.immediate_fill and self.current_market_event:
-                                self.execution_handler.process_immediate_order(event.order_id, self.current_market_event)
-                        elif event.type == 'FILL':
-                            self.fills += 1
-                            self.portfolio.update_fill(event)
-                        elif event.type == 'CANCEL_ORDER':
-                            self.execution_handler.execute_order(event)
+                        try:
+                            if event.type == 'MARKET':
+                                self.current_market_event = event
+                                self.strategy.calculate_signals(event)
+                                self.portfolio.update_timeindex(event)
+                                self.execution_handler.update(event)
+                            elif event.type == 'SIGNAL':
+                                self.signals += 1
+                                self.portfolio.update_signal(event)
+                            elif event.type == 'ORDER':
+                                self.orders += 1
+                                self.execution_handler.execute_order(event)
+                                if event.immediate_fill and self.current_market_event:
+                                    self.execution_handler.process_immediate_order(event.order_id, self.current_market_event)
+                            elif event.type == 'FILL':
+                                self.fills += 1
+                                self.portfolio.update_fill(event)
+                            elif event.type == 'CANCEL_ORDER':
+                                self.execution_handler.execute_order(event)
+                        except Exception as e:
+                            print(f"Error processing event {event.type}: {e}")
 
     def simulate_trading(self):
         """

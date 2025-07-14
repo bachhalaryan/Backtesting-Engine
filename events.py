@@ -79,17 +79,6 @@ class FillEvent(Event):
         self.partial_fill = partial_fill
 
         if commission is None:
-            self.commission = self.calculate_commission()
+            self.commission = 0.0 # Default to 0 if not provided
         else:
             self.commission = commission
-
-    def calculate_commission(self):
-        """
-        Calculates the commission for the fill.
-        """
-        # Example: Interactive Brokers-style commission
-        # $0.0035 per share, min $0.35, max 1% of trade value
-        full_cost = 0.0035 * self.quantity
-        if full_cost < 0.35:
-            full_cost = 0.35
-        return full_cost

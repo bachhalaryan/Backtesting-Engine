@@ -15,11 +15,11 @@ class EventBus:
         """
         self._events.put(event)
 
-    def get(self):
+    def get(self, block=True, timeout=None):
         """
         Gets an event from the queue.
         """
-        return self._events.get()
+        return self._events.get(block=block, timeout=timeout)
 
     def empty(self):
         """
