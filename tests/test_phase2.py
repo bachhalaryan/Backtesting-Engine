@@ -192,6 +192,39 @@ def test_strategy_access_to_portfolio_and_execution_handler(setup_csv_data):
     assert strategy.portfolio.current_positions['AAPL'] == 0
     assert len(strategy.execution_handler.orders) == 0 # No orders yet, as signal is processed after strategy
 
+def test_portfolio_position_sizing(setup_csv_data):
+    csv_dir = setup_csv_data
+    event_bus = EventBus()
+    symbol_list = ["AAPL"]
+    data_handler = CSVDataHandler(event_bus, str(csv_dir), symbol_list)
+    start_date = pd.Timestamp('2023-01-01')
+    portfolio = Portfolio(data_handler, event_bus, start_date, initial_capital=100000.0)
+
+    # Simulate a market event to get current price
+    data_handler.update_bars()
+    market_event = event_bus.get()
+    portfolio.update_timeindex(market_event)
+
+    # Test FIXED_SHARES sizing
+    signal_event_fixed = SignalEvent(1, "AAPL", pd.Timestamp('2023-01-01'), 'LONG', 1.0, sizing_type='FIXED_SHARES', sizing_value=50)
+    portfolio.update_signal(signal_event_fixed)
+    order_event_fixed = event_bus.get()
+    assert order_event_fixed.quantity == 50
+
+    # Test PERCENT_EQUITY sizing (assuming 100.50 close price from MockBars)
+    # 10% of 100000 capital = 10000.  10000 / 100.50 = 99.5 -> 99 shares
+    signal_event_percent = SignalEvent(1, "AAPL", pd.Timestamp('2023-01-01'), 'LONG', 1.0, sizing_type='PERCENT_EQUITY', sizing_value=0.10)
+    portfolio.update_signal(signal_event_percent)
+    order_event_percent = event_bus.get()
+    assert order_event_percent.quantity == int((100000.0 * 0.10) / data_handler.get_latest_bars("AAPL")[0][1]['close'])
+
+    # Test FIXED_CAPITAL sizing
+    # 5000 capital / 100.50 = 49.75 -> 49 shares
+    signal_event_capital = SignalEvent(1, "AAPL", pd.Timestamp('2023-01-01'), 'LONG', 1.0, sizing_type='FIXED_CAPITAL', sizing_value=5000)
+    portfolio.update_signal(signal_event_capital)
+    order_event_capital = event_bus.get()
+    assert order_event_capital.quantity == int(5000 / data_handler.get_latest_bars("AAPL")[0][1]['close'])
+
 # Test for SimulatedExecutionHandler
 def test_simulated_execution_handler():
     event_bus = EventBus()

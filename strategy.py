@@ -47,10 +47,10 @@ class BuyAndHoldStrategy(Strategy):
             print(f"Strategy: Open orders: {len(self.execution_handler.orders)}")
 
             if not self.bought:
-                signal = SignalEvent(1, self.symbol, event.timeindex, 'LONG', 1.0)
+                signal = SignalEvent(1, self.symbol, event.timeindex, 'LONG', 1.0, sizing_type='FIXED_SHARES', sizing_value=100)
                 self.events.put(signal)
                 self.bought = True
             elif self.bought and self.bar_count == 5:
-                signal = SignalEvent(1, self.symbol, event.timeindex, 'EXIT', 1.0)
+                signal = SignalEvent(1, self.symbol, event.timeindex, 'EXIT', 1.0, sizing_type='FIXED_SHARES', sizing_value=self.portfolio.current_positions[self.symbol])
                 self.events.put(signal)
                 self.bought = False # Reset for potential re-entry if backtest continues

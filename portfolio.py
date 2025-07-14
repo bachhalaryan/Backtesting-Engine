@@ -23,6 +23,28 @@ class Portfolio:
         self.open_positions_details = {}  # To track entry details for open positions
         self.closed_trades = []  # To store details of closed trades
 
+    def _calculate_quantity(self, symbol, sizing_type, sizing_value, direction):
+        """
+        Calculates the quantity of shares based on the sizing type and value.
+        """
+        current_price = self.bars.get_latest_bars(symbol)[0][1]['close']
+        if current_price == 0:
+            return 0 # Avoid division by zero
+
+        if sizing_type == 'FIXED_SHARES':
+            return int(sizing_value)
+        elif sizing_type == 'PERCENT_EQUITY':
+            total_equity = self.current_holdings['total']
+            capital_to_invest = total_equity * sizing_value
+            quantity = int(capital_to_invest / current_price)
+            return quantity
+        elif sizing_type == 'FIXED_CAPITAL':
+            quantity = int(sizing_value / current_price)
+            return quantity
+        else:
+            # Default to a fixed quantity if sizing type is not specified or recognized
+            return 100 # Default quantity
+
     def create_equity_curve_dataframe(self):
         self.equity_curve = pd.DataFrame(self.all_holdings)
         self.equity_curve.set_index("datetime", inplace=True)
@@ -222,8 +244,16 @@ class Portfolio:
         symbol = signal_event.symbol
         signal_type = signal_event.signal_type
         strength = signal_event.strength
+        sizing_type = signal_event.sizing_type
+        sizing_value = signal_event.sizing_value
 
-        mkt_quantity = 100  # Fixed quantity for now
+        # Calculate quantity based on sizing options
+        mkt_quantity = self._calculate_quantity(symbol, sizing_type, sizing_value, signal_type)
+
+        if mkt_quantity <= 0:
+            print(f"Warning: Calculated quantity for {symbol} is zero or negative. No order generated.")
+            return
+
         cur_quantity = self.current_positions[symbol]
 
         if signal_type == 'LONG' and cur_quantity == 0:
