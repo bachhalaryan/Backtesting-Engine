@@ -290,30 +290,42 @@ class Portfolio:
         # Calculate quantity based on sizing options
         mkt_quantity = self._calculate_quantity(symbol, sizing_type, sizing_value, signal_type)
 
+        order_type = signal_event.order_type
+        limit_price = signal_event.limit_price
+        stop_price = signal_event.stop_price
+        trail_price = signal_event.trail_price
+        immediate_fill = signal_event.immediate_fill
+
+        # Calculate quantity based on sizing options
+        mkt_quantity = self._calculate_quantity(symbol, sizing_type, sizing_value, signal_type)
+
         if mkt_quantity <= 0:
             print(f"Warning: Calculated quantity for {symbol} is zero or negative. No order generated.")
             return
 
         cur_quantity = self.current_positions[symbol]
 
-        if signal_type == 'LONG' and cur_quantity == 0:
-            order = OrderEvent(symbol, 'MKT', mkt_quantity, 'BUY', immediate_fill=False)
-        elif signal_type == 'SHORT' and cur_quantity == 0:
-            order = OrderEvent(symbol, 'MKT', mkt_quantity, 'SELL', immediate_fill=False)
-        elif signal_type == 'EXIT' and cur_quantity > 0:
-            order = OrderEvent(symbol, 'MKT', abs(cur_quantity), 'SELL', immediate_fill=False)
-        elif signal_type == 'EXIT' and cur_quantity < 0:
-            order = OrderEvent(symbol, 'MKT', abs(cur_quantity), 'BUY', immediate_fill=False)
-        elif signal_type == 'MKT_IMMEDIATE_LONG' and cur_quantity == 0:
-            order = OrderEvent(symbol, 'MKT', mkt_quantity, 'BUY', immediate_fill=True)
-        elif signal_type == 'MKT_IMMEDIATE_SHORT' and cur_quantity == 0:
-            order = OrderEvent(symbol, 'MKT', mkt_quantity, 'SELL', immediate_fill=True)
-        elif signal_type == 'MKT_IMMEDIATE_EXIT_LONG' and cur_quantity > 0:
-            order = OrderEvent(symbol, 'MKT', abs(cur_quantity), 'SELL', immediate_fill=True)
-        elif signal_type == 'MKT_IMMEDIATE_EXIT_SHORT' and cur_quantity < 0:
-            order = OrderEvent(symbol, 'MKT', abs(cur_quantity), 'BUY', immediate_fill=True)
+        # Determine order direction based on signal type and current position
+        direction = None
+        if signal_type == 'LONG':
+            direction = 'BUY'
+        elif signal_type == 'SHORT':
+            direction = 'SELL'
+        elif signal_type == 'EXIT':
+            if cur_quantity > 0:
+                direction = 'SELL'
+                mkt_quantity = abs(cur_quantity) # Exit full position
+            elif cur_quantity < 0:
+                direction = 'BUY'
+                mkt_quantity = abs(cur_quantity) # Exit full position
+            else:
+                print(f"Warning: EXIT signal for {symbol} but no open position. No order generated.")
+                return
 
-        if order:
+        if direction:
+            order = OrderEvent(symbol, order_type, mkt_quantity, direction,
+                               limit_price=limit_price, stop_price=stop_price, trail_price=trail_price,
+                               immediate_fill=immediate_fill)
             self.events.put(order)
 
     def update_signal(self, event):

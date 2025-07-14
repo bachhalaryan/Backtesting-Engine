@@ -42,21 +42,34 @@ def setup_csv_data(tmp_path):
     csv_dir = tmp_path / "data"
     csv_dir.mkdir()
 
-    # Create a dummy CSV file
+    # Create a dummy CSV file with more varied data for testing
     aapl_csv_content = """
 datetime,open,high,low,close,volume
-2023-01-01,100,101,99,100.5,100000
-2023-01-02,100.5,102,100,101.5,120000
-2023-01-03,101.5,103,101,102.5,150000
+2023-01-01,100.00,101.00,99.00,100.50,100000
+2023-01-02,100.50,102.00,100.00,101.50,120000
+2023-01-03,101.50,103.00,101.00,102.50,150000
+2023-01-04,102.50,104.00,102.00,103.50,180000
+2023-01-05,103.50,105.00,103.00,104.50,200000
+2023-01-06,104.50,106.00,104.00,105.50,220000
+2023-01-07,105.50,107.00,105.00,106.50,240000
+2023-01-08,106.50,108.00,106.00,107.50,260000
+2023-01-09,107.50,109.00,107.00,108.50,280000
+2023-01-10,108.50,110.00,108.00,109.50,300000
 """
     (csv_dir / "AAPL.csv").write_text(aapl_csv_content)
 
-    # Create another dummy CSV file for multiple symbols
     goog_csv_content = """
 datetime,open,high,low,close,volume
-2023-01-01,200,201,199,200.5,200000
-2023-01-02,200.5,202,200,201.5,240000
-2023-01-03,201.5,203,201,202.5,300000
+2023-01-01,200.00,201.00,199.00,200.50,200000
+2023-01-02,200.50,202.00,200.00,201.50,240000
+2023-01-03,201.50,203.00,201.00,202.50,300000
+2023-01-04,202.50,204.00,202.00,203.50,320000
+2023-01-05,203.50,205.00,203.00,204.50,350000
+2023-01-06,204.50,206.00,204.00,205.50,380000
+2023-01-07,205.50,207.00,205.00,206.50,400000
+2023-01-08,206.50,208.00,206.00,207.50,420000
+2023-01-09,207.50,209.00,207.00,208.50,450000
+2023-01-10,208.50,210.00,208.00,209.50,480000
 """
     (csv_dir / "GOOG.csv").write_text(goog_csv_content)
 
@@ -79,32 +92,19 @@ def test_csv_data_handler_update_bars(setup_csv_data):
     symbol_list = ["AAPL"]
     handler = CSVDataHandler(event_bus, str(csv_dir), symbol_list)
 
-    # First update
-    handler.update_bars()
-    assert not event_bus.empty()
-    event = event_bus.get()
-    assert event.type == 'MARKET'
-    assert len(handler.latest_symbol_data["AAPL"]) == 1
-    assert handler.latest_symbol_data["AAPL"][0][0] == pd.Timestamp('2023-01-01')
+    # Update bars for all 10 days
+    for i in range(10):
+        handler.update_bars()
+        assert not event_bus.empty()
+        event = event_bus.get()
+        assert event.type == 'MARKET'
+        assert len(handler.latest_symbol_data["AAPL"]) == i + 1
+        assert handler.latest_symbol_data["AAPL"][i][0] == pd.Timestamp(f'2023-01-{i+1:02d}')
 
-    # Second update
-    handler.update_bars()
-    assert not event_bus.empty()
-    event_bus.get()
-    assert len(handler.latest_symbol_data["AAPL"]) == 2
-    assert handler.latest_symbol_data["AAPL"][1][0] == pd.Timestamp('2023-01-02')
-
-    # Third update
-    handler.update_bars()
-    assert not event_bus.empty()
-    event_bus.get()
-    assert len(handler.latest_symbol_data["AAPL"]) == 3
-    assert handler.latest_symbol_data["AAPL"][2][0] == pd.Timestamp('2023-01-03')
-
-    # No more data
-    handler.update_bars()
+    # After all bars are processed, continue_backtest should be False
+    handler.update_bars() # One more call to trigger StopIteration
+    assert not handler.continue_backtest
     assert event_bus.empty() # No new market event should be put
-    assert handler.continue_backtest is False
 
 def test_csv_data_handler_get_latest_bars(setup_csv_data):
     csv_dir = setup_csv_data
@@ -624,3 +624,101 @@ def test_portfolio_reverse_short_to_long(setup_csv_data):
     assert portfolio.open_positions_details['AAPL']['quantity'] == 50 # New long position
     assert portfolio.open_positions_details['AAPL']['direction'] == 'LONG'
     assert portfolio.open_positions_details['AAPL']['entry_price'] == pytest.approx(100.50) # New long entry price
+
+def test_buy_and_hold_strategy_advanced_orders(setup_csv_data):
+    csv_dir = setup_csv_data
+    event_bus = EventBus()
+    symbol_list = ["AAPL"]
+    data_handler = CSVDataHandler(event_bus, str(csv_dir), symbol_list)
+    start_date = pd.Timestamp('2023-01-01')
+    portfolio = Portfolio(data_handler, event_bus, start_date, initial_capital=100000.0)
+    execution_handler = SimulatedExecutionHandler(event_bus, data_handler)
+    strategy = BuyAndHoldStrategy("AAPL", event_bus, data_handler, portfolio, execution_handler)
+
+    # Simulate market events and check generated signals
+    # Bar 1: Initial Market Buy
+    data_handler.update_bars()
+    market_event = event_bus.get()
+    strategy.calculate_signals(market_event)
+    signal = event_bus.get()
+    assert signal.type == 'SIGNAL'
+    assert signal.signal_type == 'LONG'
+    assert signal.order_type == 'MKT'
+    assert signal.immediate_fill == False
+    assert signal.sizing_value == 100
+
+    # Bar 2: No signal
+    data_handler.update_bars()
+    market_event = event_bus.get()
+    strategy.calculate_signals(market_event)
+    assert event_bus.empty()
+
+    # Bar 3: Limit Buy
+    data_handler.update_bars()
+    market_event = event_bus.get()
+    strategy.calculate_signals(market_event)
+    signal = event_bus.get()
+    assert signal.type == 'SIGNAL'
+    assert signal.signal_type == 'LONG'
+    assert signal.order_type == 'LMT'
+    assert signal.limit_price is not None
+    assert signal.sizing_value == 50
+
+    # Bar 4: No signal
+    data_handler.update_bars()
+    market_event = event_bus.get()
+    strategy.calculate_signals(market_event)
+    assert event_bus.empty()
+
+    # Bar 5: Stop Sell
+    data_handler.update_bars()
+    market_event = event_bus.get()
+    strategy.calculate_signals(market_event)
+    signal = event_bus.get()
+    assert signal.type == 'SIGNAL'
+    assert signal.signal_type == 'EXIT'
+    assert signal.order_type == 'STP'
+    assert signal.stop_price is not None
+
+    # Bar 6: No signal
+    data_handler.update_bars()
+    market_event = event_bus.get()
+    strategy.calculate_signals(market_event)
+    assert event_bus.empty()
+
+    # Bar 7: Trailing Stop Sell
+    data_handler.update_bars()
+    market_event = event_bus.get()
+    strategy.calculate_signals(market_event)
+    signal = event_bus.get()
+    assert signal.type == 'SIGNAL'
+    assert signal.signal_type == 'EXIT'
+    assert signal.order_type == 'TRAIL'
+    assert signal.trail_price is not None
+
+    # Bar 8: No signal
+    data_handler.update_bars()
+    market_event = event_bus.get()
+    strategy.calculate_signals(market_event)
+    assert event_bus.empty()
+
+    # Bar 9: Immediate Fill Market Buy
+    data_handler.update_bars()
+    market_event = event_bus.get()
+    strategy.calculate_signals(market_event)
+    signal = event_bus.get()
+    assert signal.type == 'SIGNAL'
+    assert signal.signal_type == 'LONG'
+    assert signal.order_type == 'MKT'
+    assert signal.immediate_fill == True
+    assert signal.sizing_value == 20
+
+    # Bar 10: Final Exit Market Order
+    data_handler.update_bars()
+    market_event = event_bus.get()
+    strategy.calculate_signals(market_event)
+    signal = event_bus.get()
+    assert signal.type == 'SIGNAL'
+    assert signal.signal_type == 'EXIT'
+    assert signal.order_type == 'MKT'
+    assert signal.immediate_fill == False

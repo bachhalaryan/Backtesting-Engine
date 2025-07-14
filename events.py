@@ -18,7 +18,10 @@ class SignalEvent(Event):
     Handles the event of sending a Signal from a Strategy object.
     This is received by a Portfolio object and acted upon.
     """
-    def __init__(self, strategy_id, symbol, datetime, signal_type, strength, sizing_type=None, sizing_value=None):
+    def __init__(self, strategy_id, symbol, datetime, signal_type, strength,
+                 sizing_type=None, sizing_value=None,
+                 order_type='MKT', limit_price=None, stop_price=None, trail_price=None,
+                 immediate_fill=False):
         self.type = 'SIGNAL'
         self.symbol = symbol
         self.datetime = datetime
@@ -26,6 +29,11 @@ class SignalEvent(Event):
         self.strength = strength
         self.sizing_type = sizing_type
         self.sizing_value = sizing_value
+        self.order_type = order_type
+        self.limit_price = limit_price
+        self.stop_price = stop_price
+        self.trail_price = trail_price
+        self.immediate_fill = immediate_fill
 
 class OrderEvent(Event):
     """

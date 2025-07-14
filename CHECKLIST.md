@@ -7,4 +7,4 @@ This document tracks the implementation of new features for the backtesting engi
 - [x] **Strategy Access to Past Data**: Allow strategies to query historical market data.
 - [x] **Strategy Access to Order Book and Cashbook State**: Enable strategies to access current cash, positions, and open orders.
 - [x] **Position Sizing Options**: Introduce flexible position sizing mechanisms.
-- [ ] **Advanced Order Types**: Allow strategies to specify and utilize advanced order types (Limit, Stop, Trailing Stop).
+- [x] **Advanced Order Types**: Allow strategies to specify and utilize advanced order types (Limit, Stop, Trailing Stop).
