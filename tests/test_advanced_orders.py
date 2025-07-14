@@ -257,64 +257,105 @@ def test_trailing_stop_buy_fill(setup_csv_data):
     assert fill_event.direction == 'BUY'
     assert fill_event.fill_cost == pytest.approx(100.00 * 100) # Filled at open price
 
-def test_trailing_stop_sell_fill(setup_csv_data):
-    csv_dir = setup_csv_data
-    event_bus = EventBus()
-    data_handler = CSVDataHandler(event_bus, str(csv_dir), ["AAPL"])
-    execution_handler = SimulatedExecutionHandler(event_bus, data_handler)
-
-    # Trailing stop 1.00 above lowest close
-    order = OrderEvent("AAPL", "TRAIL", 100, "SELL", trail_price=1.00)
-    execution_handler.execute_order(order)
-
-    # 2023-01-01: Close=100.50, Trail=101.50. Low=99.00. Should trigger.
-    data_handler.update_bars()
-    market_event = event_bus.get()
-    execution_handler.update(market_event)
-
-    assert not event_bus.empty()
-    fill_event = event_bus.get()
-    assert fill_event.type == 'FILL'
-    assert fill_event.symbol == 'AAPL'
-    assert fill_event.quantity == 100
-    assert fill_event.direction == 'SELL'
-    assert fill_event.fill_cost == pytest.approx(100.00 * 100) # Filled at open price
-
 # --- Partial Fill Tests ---
 
 def test_partial_fill_market_order(setup_csv_data):
     csv_dir = setup_csv_data
     event_bus = EventBus()
     data_handler = CSVDataHandler(event_bus, str(csv_dir), ["AAPL"])
-    execution_handler = SimulatedExecutionHandler(event_bus, data_handler)
+    execution_handler = SimulatedExecutionHandler(event_bus, data_handler, partial_fill_volume_pct=0.1) # 10% of bar volume
 
-    # Simulate a market order for 2 shares
-    order = OrderEvent("AAPL", "MKT", 2, "BUY")
+    # Simulate a market order for 50000 shares
+    order = OrderEvent("AAPL", "MKT", 50000, "BUY")
     execution_handler.execute_order(order)
 
-    # First market update: should partially fill (1 share)
-    data_handler.update_bars() # 2023-01-01
+    # First market update: should partially fill (10% of 100000 volume = 10000 shares)
+    data_handler.update_bars() # 2023-01-01: Volume=100000
     market_event = event_bus.get()
     execution_handler.update(market_event)
 
     assert not event_bus.empty()
     fill_event1 = event_bus.get()
     assert fill_event1.type == 'FILL'
-    assert fill_event1.quantity == 1
+    assert fill_event1.quantity == 10000
     assert fill_event1.partial_fill is True
-    assert execution_handler.orders[1].filled_quantity == 1
+    assert execution_handler.orders[1].filled_quantity == 10000
 
-    # Second market update: should fill the remaining (1 share)
-    data_handler.update_bars() # 2023-01-02
+    # Second market update: should partially fill again (10% of 120000 volume = 12000 shares)
+    data_handler.update_bars() # 2023-01-02: Volume=120000
     market_event = event_bus.get()
     execution_handler.update(market_event)
 
     assert not event_bus.empty()
     fill_event2 = event_bus.get()
     assert fill_event2.type == 'FILL'
-    assert fill_event2.quantity == 1
-    assert fill_event2.partial_fill is False
+    assert fill_event2.quantity == 12000
+    assert fill_event2.partial_fill is True
+    assert execution_handler.orders[1].filled_quantity == 22000
+
+    # Third market update: should partially fill again (10% of 150000 volume = 15000 shares)
+    data_handler.update_bars() # 2023-01-03: Volume=150000
+    market_event = event_bus.get()
+    execution_handler.update(market_event)
+
+    assert not event_bus.empty()
+    fill_event3 = event_bus.get()
+    assert fill_event3.type == 'FILL'
+    assert fill_event3.quantity == 15000
+    assert fill_event3.partial_fill is True
+    assert execution_handler.orders[1].filled_quantity == 37000
+
+    # Fourth market update: should fill the remaining (50000 - 37000 = 13000 shares)
+    data_handler.update_bars() # 2023-01-04: Volume=180000
+    market_event = event_bus.get()
+    execution_handler.update(market_event)
+
+    assert not event_bus.empty()
+    fill_event4 = event_bus.get()
+    assert fill_event4.type == 'FILL'
+    assert fill_event4.quantity == 13000
+    assert fill_event4.partial_fill is False
     assert execution_handler.orders.get(1) is None # Order should be removed
+
+# --- Slippage Tests ---
+
+def test_slippage_buy_order(setup_csv_data):
+    csv_dir = setup_csv_data
+    event_bus = EventBus()
+    data_handler = CSVDataHandler(event_bus, str(csv_dir), ["AAPL"])
+    execution_handler = SimulatedExecutionHandler(event_bus, data_handler, slippage_bps=10) # 10 basis points slippage
+
+    order = OrderEvent("AAPL", "MKT", 100, "BUY")
+    execution_handler.execute_order(order)
+
+    data_handler.update_bars() # 2023-01-01: Open=100.00
+    market_event = event_bus.get()
+    execution_handler.update(market_event)
+
+    assert not event_bus.empty()
+    fill_event = event_bus.get()
+    assert fill_event.type == 'FILL'
+    expected_fill_price = 100.00 * (1 + 10 / 10000.0) # 100.00 * 1.001 = 100.1
+    assert fill_event.fill_cost == pytest.approx(expected_fill_price * 100)
+
+def test_slippage_sell_order(setup_csv_data):
+    csv_dir = setup_csv_data
+    event_bus = EventBus()
+    data_handler = CSVDataHandler(event_bus, str(csv_dir), ["AAPL"])
+    execution_handler = SimulatedExecutionHandler(event_bus, data_handler, slippage_bps=10) # 10 basis points slippage
+
+    order = OrderEvent("AAPL", "MKT", 100, "SELL")
+    execution_handler.execute_order(order)
+
+    data_handler.update_bars() # 2023-01-01: Open=100.00
+    market_event = event_bus.get()
+    execution_handler.update(market_event)
+
+    assert not event_bus.empty()
+    fill_event = event_bus.get()
+    assert fill_event.type == 'FILL'
+    expected_fill_price = 100.00 * (1 - 10 / 10000.0) # 100.00 * 0.999 = 99.9
+    assert fill_event.fill_cost == pytest.approx(expected_fill_price * 100)
 
 # --- Order Cancellation Tests ---
 

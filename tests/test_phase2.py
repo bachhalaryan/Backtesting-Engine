@@ -14,7 +14,7 @@ from execution_handler import SimulatedExecutionHandler
 
 class MockBars:
     def get_latest_bars(self, symbol):
-        return [(pd.Timestamp('2023-01-01'), {'open': 100, 'high': 101, 'low': 99, 'close': 100.5})]
+        return [(pd.Timestamp('2023-01-01'), {'open': 100, 'high': 101, 'low': 99, 'close': 100.5, 'volume': 100000})]
 
 # Test for EventBus
 def test_event_bus_put_get():
