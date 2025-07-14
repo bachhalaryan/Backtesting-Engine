@@ -44,14 +44,16 @@ class Backtester:
         self.data_handler = self.data_handler_cls(self.events, 
                                                   self.csv_dir, 
                                                   self.symbol_list)
-        self.strategy = self.strategy_cls(self.symbol_list[0], 
-                                          self.events, 
-                                          self.data_handler)
         self.portfolio = self.portfolio_cls(self.data_handler, 
                                            self.events, 
                                            self.start_date, 
                                            self.initial_capital)
         self.execution_handler = self.execution_handler_cls(self.events, self.data_handler)
+        self.strategy = self.strategy_cls(self.symbol_list[0], 
+                                          self.events, 
+                                          self.data_handler, 
+                                          self.portfolio, 
+                                          self.execution_handler)
 
     def _run_backtest(self):
         """

@@ -17,10 +17,12 @@ class BuyAndHoldStrategy(Strategy):
     A testing strategy that simply purchases a fixed quantity of a
     security and holds it until a specified date passes.
     """
-    def __init__(self, symbol, events, data_handler):
+    def __init__(self, symbol, events, data_handler, portfolio, execution_handler):
         self.symbol = symbol
         self.events = events
         self.data_handler = data_handler # Store data_handler for historical data access
+        self.portfolio = portfolio
+        self.execution_handler = execution_handler
         self.bought = False
         self.bar_count = 0
 
@@ -38,6 +40,11 @@ class BuyAndHoldStrategy(Strategy):
             historical_bars = self.data_handler.get_historical_bars(self.symbol, N=3)
             if not historical_bars.empty:
                 print(f"Strategy: Latest 3 historical bars for {self.symbol}:\n{historical_bars}")
+
+            # Demonstrate accessing portfolio and execution handler state
+            print(f"Strategy: Current cash: {self.portfolio.current_holdings['cash']:.2f}")
+            print(f"Strategy: Current {self.symbol} position: {self.portfolio.current_positions[self.symbol]}")
+            print(f"Strategy: Open orders: {len(self.execution_handler.orders)}")
 
             if not self.bought:
                 signal = SignalEvent(1, self.symbol, event.timeindex, 'LONG', 1.0)

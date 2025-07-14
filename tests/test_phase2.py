@@ -30,6 +30,7 @@ def test_event_bus_empty():
     event_bus = EventBus()
     assert event_bus.empty()
     event_bus.put(MarketEvent(pd.Timestamp('2023-01-01')))
+
     assert not event_bus.empty()
     event_bus.get()
     assert event_bus.empty()
@@ -148,7 +149,10 @@ def test_buy_and_hold_strategy(setup_csv_data):
     event_bus = EventBus()
     symbol_list = ["AAPL"]
     data_handler = CSVDataHandler(event_bus, str(csv_dir), symbol_list)
-    strategy = BuyAndHoldStrategy("AAPL", event_bus)
+    start_date = pd.Timestamp('2023-01-01')
+    portfolio = Portfolio(data_handler, event_bus, start_date, initial_capital=100000.0)
+    execution_handler = SimulatedExecutionHandler(event_bus, data_handler)
+    strategy = BuyAndHoldStrategy("AAPL", event_bus, data_handler, portfolio, execution_handler)
 
     # Simulate a market event
     data_handler.update_bars()
@@ -167,6 +171,26 @@ def test_buy_and_hold_strategy(setup_csv_data):
     market_event = event_bus.get()
     strategy.calculate_signals(market_event)
     assert event_bus.empty()
+
+def test_strategy_access_to_portfolio_and_execution_handler(setup_csv_data):
+    csv_dir = setup_csv_data
+    event_bus = EventBus()
+    symbol_list = ["AAPL"]
+    data_handler = CSVDataHandler(event_bus, str(csv_dir), symbol_list)
+    start_date = pd.Timestamp('2023-01-01')
+    portfolio = Portfolio(data_handler, event_bus, start_date, initial_capital=100000.0)
+    execution_handler = SimulatedExecutionHandler(event_bus, data_handler)
+    strategy = BuyAndHoldStrategy("AAPL", event_bus, data_handler, portfolio, execution_handler)
+
+    # Simulate a market event
+    data_handler.update_bars()
+    market_event = event_bus.get()
+    strategy.calculate_signals(market_event)
+
+    # Assert that the strategy can access portfolio and execution handler states
+    assert strategy.portfolio.current_holdings['cash'] == pytest.approx(100000.0)
+    assert strategy.portfolio.current_positions['AAPL'] == 0
+    assert len(strategy.execution_handler.orders) == 0 # No orders yet, as signal is processed after strategy
 
 # Test for SimulatedExecutionHandler
 def test_simulated_execution_handler():
@@ -259,7 +283,6 @@ def test_portfolio_update_fill_and_generate_order(setup_csv_data):
     assert portfolio.current_holdings['cash'] == pytest.approx(89949.65)
     assert portfolio.current_holdings['commission'] == pytest.approx(0.35)
     
-
 def test_portfolio_equity_curve(setup_csv_data):
     csv_dir = setup_csv_data
     event_bus = EventBus()
@@ -281,4 +304,3 @@ def test_portfolio_equity_curve(setup_csv_data):
     assert len(portfolio.equity_curve) == 4 # Initial + 3 updates
     assert portfolio.equity_curve.iloc[0]['total'] == 100000.0
     assert portfolio.equity_curve.iloc[-1]['equity_curve'] == 100000.0 # No trades, so equity curve should be flat
-    
