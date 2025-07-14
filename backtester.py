@@ -45,7 +45,8 @@ class Backtester:
                                                   self.csv_dir, 
                                                   self.symbol_list)
         self.strategy = self.strategy_cls(self.symbol_list[0], 
-                                          self.events)
+                                          self.events, 
+                                          self.data_handler)
         self.portfolio = self.portfolio_cls(self.data_handler, 
                                            self.events, 
                                            self.start_date, 

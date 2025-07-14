@@ -12,6 +12,9 @@ class DataHandler:
     def update_bars(self):
         raise NotImplementedError("Should implement update_bars()")
 
+    def get_historical_bars(self, symbol, N=None):
+        raise NotImplementedError("Should implement get_historical_bars()")
+
 class CSVDataHandler(DataHandler):
     """
     CSVDataHandler is designed to read CSV files for each symbol
@@ -71,8 +74,24 @@ class CSVDataHandler(DataHandler):
             bars_list = self.latest_symbol_data[symbol]
         except KeyError:
             print("This symbol is not available in the historical data set.")
+            return [] # Return empty list if symbol not found
         else:
             return bars_list[-N:]
+
+    def get_historical_bars(self, symbol, N=None):
+        """
+        Returns the last N historical bars for a given symbol from the full dataset.
+        If N is None, returns all historical bars.
+        """
+        if symbol not in self.symbol_data:
+            print(f"Symbol {symbol} not found in historical data.")
+            return pd.DataFrame()
+        
+        if N is None:
+            return self.symbol_data[symbol]
+        else:
+            # Ensure we don't try to return more bars than available
+            return self.symbol_data[symbol].iloc[-N:]
 
     def update_bars(self):
         """
