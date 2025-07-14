@@ -69,7 +69,8 @@ def test_csv_data_handler_initialization(setup_csv_data):
 
     assert handler.continue_backtest is True
     assert "AAPL" in handler.symbol_data
-    assert isinstance(handler.symbol_data["AAPL"], type(pd.DataFrame().iterrows()))
+    assert isinstance(handler.symbol_data["AAPL"], pd.DataFrame)
+    assert hasattr(handler.bar_generators["AAPL"], '__next__') # Check if it's an iterator
 
 def test_csv_data_handler_update_bars(setup_csv_data):
     csv_dir = setup_csv_data

@@ -20,6 +20,8 @@ class Portfolio:
         self.all_holdings = self._construct_all_holdings()
         self.current_holdings = self._construct_current_holdings()
         self.equity_curve = pd.DataFrame()
+        self.open_positions_details = {}  # To track entry details for open positions
+        self.closed_trades = []  # To store details of closed trades
 
     def create_equity_curve_dataframe(self):
         self.equity_curve = pd.DataFrame(self.all_holdings)
@@ -120,6 +122,97 @@ class Portfolio:
         self.current_holdings['commission'] += fill_event.commission
         
 
+    def _track_trades_from_fill(self, fill_event):
+        """
+        Tracks individual trades (entry, exit, PnL, duration) based on fill events.
+        """
+        symbol = fill_event.symbol
+        fill_quantity = fill_event.quantity
+        fill_price = fill_event.fill_cost / fill_quantity if fill_quantity != 0 else 0.0
+        fill_time = fill_event.timeindex
+        fill_direction = fill_event.direction
+
+        current_position = self.current_positions[symbol]
+
+        if fill_direction == 'BUY':
+            # Opening or adding to a long position
+            if symbol not in self.open_positions_details:
+                self.open_positions_details[symbol] = {
+                    'entry_time': fill_time,
+                    'entry_price': fill_price,
+                    'quantity': fill_quantity,
+                    'direction': 'LONG',
+                    'commission': fill_event.commission
+                }
+            else:
+                # Average down/up
+                existing_pos = self.open_positions_details[symbol]
+                total_quantity = existing_pos['quantity'] + fill_quantity
+                existing_pos['entry_price'] = (existing_pos['entry_price'] * existing_pos['quantity'] + fill_price * fill_quantity) / total_quantity
+                existing_pos['quantity'] = total_quantity
+                existing_pos['commission'] += fill_event.commission
+
+        elif fill_direction == 'SELL':
+            # Closing or adding to a short position, or closing a long position
+            if symbol in self.open_positions_details:
+                # Closing an existing long position
+                existing_pos = self.open_positions_details[symbol]
+                
+                if existing_pos['direction'] == 'LONG':
+                    # Calculate PnL for the portion being closed
+                    pnl = (fill_price - existing_pos['entry_price']) * fill_quantity - fill_event.commission
+                    
+                    trade = {
+                        'symbol': symbol,
+                        'entry_time': existing_pos['entry_time'],
+                        'exit_time': fill_time,
+                        'entry_price': existing_pos['entry_price'],
+                        'exit_price': fill_price,
+                        'quantity': fill_quantity,
+                        'direction': 'LONG',
+                        'pnl': pnl,
+                        'commission': existing_pos['commission'] + fill_event.commission,
+                        'duration': (fill_time - existing_pos['entry_time']).total_seconds() / (60*60*24) # Duration in days
+                    }
+                    self.closed_trades.append(trade)
+
+                    # Update remaining quantity in open position
+                    existing_pos['quantity'] -= fill_quantity
+                    if existing_pos['quantity'] <= 0:
+                        del self.open_positions_details[symbol]
+                    else:
+                        # Adjust commission for remaining open position if partial close
+                        existing_pos['commission'] = (existing_pos['commission'] / (existing_pos['quantity'] + fill_quantity)) * existing_pos['quantity']
+                
+                # TODO: Handle closing short positions and opening/adding to short positions
+                # This requires more complex logic to track short entries and exits.
+                # For now, assuming only long positions are tracked for simplicity.
+            else:
+                # This is a new short position or adding to an existing short position
+                # For now, we'll just record it as an open short position.
+                # A more robust solution would track short entries similar to long entries.
+                if symbol not in self.open_positions_details:
+                    self.open_positions_details[symbol] = {
+                        'entry_time': fill_time,
+                        'entry_price': fill_price,
+                        'quantity': fill_quantity,
+                        'direction': 'SHORT',
+                        'commission': fill_event.commission
+                    }
+                else:
+                    existing_pos = self.open_positions_details[symbol]
+                    if existing_pos['direction'] == 'SHORT':
+                        total_quantity = existing_pos['quantity'] + fill_quantity
+                        existing_pos['entry_price'] = (existing_pos['entry_price'] * existing_pos['quantity'] + fill_price * fill_quantity) / total_quantity
+                        existing_pos['quantity'] = total_quantity
+                        existing_pos['commission'] += fill_event.commission
+                    else:
+                        # This means we are selling to close a long position, but there was no open_positions_details entry
+                        # This case should ideally not happen if tracking is perfect, but can occur with complex order types
+                        # or if initial positions are not properly set up.
+                        pass # Or log a warning
+        
+
     def generate_order(self, signal_event):
         """
         Generates an OrderEvent object based on a SignalEvent.
@@ -163,7 +256,9 @@ class Portfolio:
     def update_fill(self, event):
         """
         Updates the portfolio current positions and holdings from a FillEvent.
+        Also tracks individual trades.
         """
         if event.type == 'FILL':
             self.update_positions_from_fill(event)
             self.update_holdings_from_fill(event)
+            self._track_trades_from_fill(event)

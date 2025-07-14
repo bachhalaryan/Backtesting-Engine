@@ -21,13 +21,20 @@ class BuyAndHoldStrategy(Strategy):
         self.symbol = symbol
         self.events = events
         self.bought = False
+        self.bar_count = 0
 
     def calculate_signals(self, event):
         """
         For this strategy, we will simply buy 100 units of the
-        first symbol we receive and then do nothing else.
+        first symbol we receive and then sell after 5 bars.
         """
-        if event.type == 'MARKET' and not self.bought:
-            signal = SignalEvent(1, self.symbol, event.timeindex, 'LONG', 1.0)
-            self.events.put(signal)
-            self.bought = True
+        if event.type == 'MARKET':
+            self.bar_count += 1
+            if not self.bought:
+                signal = SignalEvent(1, self.symbol, event.timeindex, 'LONG', 1.0)
+                self.events.put(signal)
+                self.bought = True
+            elif self.bought and self.bar_count == 5:
+                signal = SignalEvent(1, self.symbol, event.timeindex, 'EXIT', 1.0)
+                self.events.put(signal)
+                self.bought = False # Reset for potential re-entry if backtest continues

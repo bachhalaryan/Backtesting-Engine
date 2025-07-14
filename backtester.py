@@ -1,11 +1,14 @@
 import datetime
 import queue
+import os
 
 from data_handler import CSVDataHandler
 from strategy import BuyAndHoldStrategy
 from portfolio import Portfolio
 from execution_handler import SimulatedExecutionHandler
 from events import MarketEvent, SignalEvent, OrderEvent, FillEvent
+from performance_analyzer import PerformanceAnalyzer
+from backtest_manager import BacktestManager
 
 class Backtester:
     """
@@ -95,4 +98,56 @@ class Backtester:
         """
         self._run_backtest()
         self.portfolio.create_equity_curve_dataframe()
-        print(self.portfolio.equity_curve.tail(10))
+
+        # --- Performance Analysis and Reporting ---
+        performance_analyzer = PerformanceAnalyzer(self.portfolio, self.data_handler)
+        metrics = performance_analyzer.calculate_metrics()
+
+        # Define backtest name and parameters for saving
+        backtest_name = f"backtest_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}"
+        backtest_params = {
+            "initial_capital": self.initial_capital,
+            "start_date": str(self.start_date),
+            "symbol_list": self.symbol_list,
+            "data_handler": self.data_handler_cls.__name__,
+            "strategy": self.strategy_cls.__name__,
+            "execution_handler": self.execution_handler_cls.__name__
+        }
+
+        # Initialize BacktestManager to get the base directory
+        backtest_manager = BacktestManager()
+        
+        # Define the specific directory for this backtest run
+        backtest_run_dir = backtest_manager._get_backtest_path(backtest_name)
+        os.makedirs(backtest_run_dir, exist_ok=True) # Ensure the directory exists before saving plots
+
+        # Generate plot file paths within the backtest_run_dir
+        plot_filepaths = {
+            "equity_curve_matplotlib": os.path.join(backtest_run_dir, "equity_curve.png"),
+            "drawdown_matplotlib": os.path.join(backtest_run_dir, "drawdown.png"),
+            "equity_curve_plotly": os.path.join(backtest_run_dir, "equity_curve.html"),
+            "drawdown_plotly": os.path.join(backtest_run_dir, "drawdown.html"),
+            "trades_plotly": os.path.join(backtest_run_dir, "trades.html")
+        }
+
+        # Generate plots directly into the backtest_run_dir
+        performance_analyzer.generate_equity_curve_matplotlib(plot_filepaths["equity_curve_matplotlib"])
+        performance_analyzer.generate_drawdown_matplotlib(plot_filepaths["drawdown_matplotlib"])
+        performance_analyzer.generate_equity_curve_plotly(plot_filepaths["equity_curve_plotly"])
+        performance_analyzer.generate_drawdown_plotly(plot_filepaths["drawdown_plotly"])
+        performance_analyzer.generate_trades_plotly(plot_filepaths["trades_plotly"])
+
+        # Save backtest results (plots are already in place)
+        backtest_manager.save_backtest(
+            backtest_name,
+            self.portfolio,
+            backtest_params,
+            metrics,
+            plot_filepaths # Pass the paths for recording, not for moving
+        )
+
+        print("\n--- Backtest Summary ---")
+        for key, value in metrics.items():
+            print(f"{key}: {value:.2f}")
+        print("------------------------")
+        print(f"Detailed results saved to: {backtest_manager.base_dir}/{backtest_name}")

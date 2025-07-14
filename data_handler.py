@@ -23,8 +23,9 @@ class CSVDataHandler(DataHandler):
         self.csv_dir = csv_dir
         self.symbol_list = symbol_list
 
-        self.symbol_data = {}
+        self.symbol_data = {} # Stores the full DataFrame for each symbol
         self.latest_symbol_data = {}
+        self.bar_generators = {} # Stores iterators for each symbol
         self.continue_backtest = True
         self._open_convert_csv_files()
 
@@ -53,14 +54,14 @@ class CSVDataHandler(DataHandler):
         for s in self.symbol_list:
             self.symbol_data[s] = self.symbol_data[s].reindex(
                 index=comb_index, method='pad'
-            ).iterrows()
+            )
+        self.bar_generators = {s: self.symbol_data[s].iterrows() for s in self.symbol_list}
 
     def _get_new_bar(self, symbol):
         """
-        Returns the latest bar from the data feed.
+        Returns the iterator for the next bar from the data feed.
         """
-        for b in self.symbol_data[symbol]:
-            yield b
+        return self.bar_generators[symbol]
 
     def get_latest_bars(self, symbol, N=1):
         """
