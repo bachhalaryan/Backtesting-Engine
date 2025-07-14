@@ -115,7 +115,7 @@ class Portfolio:
         if fill_event.direction == 'SELL':
             fill_direction = -1
 
-        fill_cost = self.bars.get_latest_bars(fill_event.symbol)[0][1]['close'] * fill_event.quantity
+        fill_cost = fill_event.fill_cost
         self.current_holdings['cash'] -= (fill_direction * fill_cost) + fill_event.commission
         self.current_holdings['commission'] += fill_event.commission
         

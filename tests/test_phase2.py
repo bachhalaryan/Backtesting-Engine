@@ -12,6 +12,10 @@ from strategy import BuyAndHoldStrategy
 from portfolio import Portfolio
 from execution_handler import SimulatedExecutionHandler
 
+class MockBars:
+    def get_latest_bars(self, symbol):
+        return [(pd.Timestamp('2023-01-01'), {'open': 100, 'high': 101, 'low': 99, 'close': 100.5})]
+
 # Test for EventBus
 def test_event_bus_put_get():
     event_bus = EventBus()
@@ -166,10 +170,13 @@ def test_buy_and_hold_strategy(setup_csv_data):
 # Test for SimulatedExecutionHandler
 def test_simulated_execution_handler():
     event_bus = EventBus()
-    execution_handler = SimulatedExecutionHandler(event_bus)
+    bars = MockBars()
+    execution_handler = SimulatedExecutionHandler(event_bus, bars)
 
     order_event = OrderEvent("AAPL", 'MKT', 100, 'BUY')
     execution_handler.execute_order(order_event)
+    market_event = MarketEvent(pd.Timestamp('2023-01-01'))
+    execution_handler.update(market_event)
 
     assert not event_bus.empty()
     fill_event = event_bus.get()
@@ -241,13 +248,13 @@ def test_portfolio_update_fill_and_generate_order(setup_csv_data):
         exchange='ARCA',
         quantity=100,
         direction='BUY',
-        fill_cost=100.5, # Assuming close price from 2023-01-01
+        fill_cost=10050,
         commission=0.35
     )
     portfolio.update_fill(fill_event)
 
     assert portfolio.current_positions['AAPL'] == 100
-    # 100000 (initial) - (100 * 100.5) - 0.35 = 100000 - 10050 - 0.35 = 89949.65
+    # 100000 (initial) - 10050 - 0.35 = 89949.65
     assert portfolio.current_holdings['cash'] == pytest.approx(89949.65)
     assert portfolio.current_holdings['commission'] == pytest.approx(0.35)
     

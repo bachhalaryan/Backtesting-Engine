@@ -29,12 +29,26 @@ class OrderEvent(Event):
     """
     Handles the event of sending an Order to an ExecutionHandler.
     """
-    def __init__(self, symbol, order_type, quantity, direction):
+    def __init__(self, symbol, order_type, quantity, direction, limit_price=None, stop_price=None, trail_price=None):
         self.type = 'ORDER'
         self.symbol = symbol
-        self.order_type = order_type  # "MKT" or "LMT"
+        self.order_type = order_type
         self.quantity = quantity
-        self.direction = direction  # "BUY" or "SELL"
+        self.direction = direction
+        self.limit_price = limit_price
+        self.stop_price = stop_price
+        self.trail_price = trail_price
+        self.filled_quantity = 0
+        self.highest_price_seen = -float('inf')
+        self.lowest_price_seen = float('inf')
+
+class CancelOrderEvent(Event):
+    """
+    Handles the event of sending a CancelOrder to an ExecutionHandler.
+    """
+    def __init__(self, order_id):
+        self.type = 'CANCEL_ORDER'
+        self.order_id = order_id
 
 class FillEvent(Event):
     """
@@ -42,7 +56,7 @@ class FillEvent(Event):
     ExecutionHandler.
     """
     def __init__(self, timeindex, symbol, exchange, quantity, 
-                 direction, fill_cost, commission=None):
+                 direction, fill_cost, commission=None, order_id=None, partial_fill=False):
         self.type = 'FILL'
         self.timeindex = timeindex
         self.symbol = symbol
@@ -50,8 +64,9 @@ class FillEvent(Event):
         self.quantity = quantity
         self.direction = direction
         self.fill_cost = fill_cost
+        self.order_id = order_id
+        self.partial_fill = partial_fill
 
-        # Calculate commission if not provided
         if commission is None:
             self.commission = self.calculate_commission()
         else:

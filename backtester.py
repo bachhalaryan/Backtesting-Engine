@@ -46,7 +46,7 @@ class Backtester:
                                            self.events, 
                                            self.start_date, 
                                            self.initial_capital)
-        self.execution_handler = self.execution_handler_cls(self.events)
+        self.execution_handler = self.execution_handler_cls(self.events, self.data_handler)
 
     def _run_backtest(self):
         """
@@ -72,6 +72,7 @@ class Backtester:
                         if event.type == 'MARKET':
                             self.strategy.calculate_signals(event)
                             self.portfolio.update_timeindex(event)
+                            self.execution_handler.update(event)
                         elif event.type == 'SIGNAL':
                             self.signals += 1
                             self.portfolio.update_signal(event)
@@ -81,6 +82,8 @@ class Backtester:
                         elif event.type == 'FILL':
                             self.fills += 1
                             self.portfolio.update_fill(event)
+                        elif event.type == 'CANCEL_ORDER':
+                            self.execution_handler.execute_order(event)
 
     def simulate_trading(self):
         """
