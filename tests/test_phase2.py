@@ -337,3 +337,290 @@ def test_portfolio_equity_curve(setup_csv_data):
     assert len(portfolio.equity_curve) == 4 # Initial + 3 updates
     assert portfolio.equity_curve.iloc[0]['total'] == 100000.0
     assert portfolio.equity_curve.iloc[-1]['equity_curve'] == 100000.0 # No trades, so equity curve should be flat
+
+def test_portfolio_open_short_position(setup_csv_data):
+    csv_dir = setup_csv_data
+    event_bus = EventBus()
+    symbol_list = ["AAPL"]
+    data_handler = CSVDataHandler(event_bus, str(csv_dir), symbol_list)
+    start_date = pd.Timestamp('2023-01-01')
+    portfolio = Portfolio(data_handler, event_bus, start_date, initial_capital=100000.0)
+    execution_handler = SimulatedExecutionHandler(event_bus, data_handler)
+
+    # Simulate market event and update timeindex
+    data_handler.update_bars()
+    market_event = event_bus.get()
+    portfolio.update_timeindex(market_event)
+
+    # Simulate a sell order to open a short position
+    order = OrderEvent("AAPL", "MKT", 100, "SELL")
+    execution_handler.execute_order(order)
+    execution_handler.process_immediate_order(order.order_id, market_event)
+    fill_event = event_bus.get()
+    portfolio.update_fill(fill_event)
+
+    assert portfolio.current_positions['AAPL'] == -100
+    assert portfolio.open_positions_details['AAPL']['quantity'] == 100
+    assert portfolio.open_positions_details['AAPL']['direction'] == 'SHORT'
+    assert not portfolio.closed_trades
+
+def test_portfolio_close_short_position(setup_csv_data):
+    csv_dir = setup_csv_data
+    event_bus = EventBus()
+    symbol_list = ["AAPL"]
+    data_handler = CSVDataHandler(event_bus, str(csv_dir), symbol_list)
+    start_date = pd.Timestamp('2023-01-01')
+    portfolio = Portfolio(data_handler, event_bus, start_date, initial_capital=100000.0)
+    execution_handler = SimulatedExecutionHandler(event_bus, data_handler)
+
+    # Open short position
+    data_handler.update_bars() # Day 1
+    market_event_day1 = event_bus.get()
+    portfolio.update_timeindex(market_event_day1)
+    order_open = OrderEvent("AAPL", "MKT", 100, "SELL")
+    execution_handler.execute_order(order_open)
+    execution_handler.process_immediate_order(order_open.order_id, market_event_day1)
+    fill_open = event_bus.get()
+    portfolio.update_fill(fill_open)
+
+    # Close short position on Day 2
+    data_handler.update_bars() # Day 2
+    market_event_day2 = event_bus.get()
+    portfolio.update_timeindex(market_event_day2)
+    order_close = OrderEvent("AAPL", "MKT", 100, "BUY")
+    execution_handler.execute_order(order_close)
+    execution_handler.process_immediate_order(order_close.order_id, market_event_day2)
+    fill_close = event_bus.get()
+    portfolio.update_fill(fill_close)
+
+    assert portfolio.current_positions['AAPL'] == 0
+    assert not portfolio.open_positions_details
+    assert len(portfolio.closed_trades) == 1
+    trade = portfolio.closed_trades[0]
+    assert trade['direction'] == 'SHORT'
+    assert trade['quantity'] == 100
+    assert trade['entry_price'] == pytest.approx(100.00) # Day 1 open
+    assert trade['exit_price'] == pytest.approx(100.50) # Day 2 open
+    assert trade['pnl'] == pytest.approx((100.00 - 100.50) * 100 - (fill_open.commission + fill_close.commission))
+
+def test_portfolio_partial_close_long_position(setup_csv_data):
+    csv_dir = setup_csv_data
+    event_bus = EventBus()
+    symbol_list = ["AAPL"]
+    data_handler = CSVDataHandler(event_bus, str(csv_dir), symbol_list)
+    start_date = pd.Timestamp('2023-01-01')
+    portfolio = Portfolio(data_handler, event_bus, start_date, initial_capital=100000.0)
+    execution_handler = SimulatedExecutionHandler(event_bus, data_handler)
+
+    # Open long position
+    data_handler.update_bars() # Day 1
+    market_event_day1 = event_bus.get()
+    portfolio.update_timeindex(market_event_day1)
+    order_open = OrderEvent("AAPL", "MKT", 100, "BUY")
+    execution_handler.execute_order(order_open)
+    execution_handler.process_immediate_order(order_open.order_id, market_event_day1)
+    fill_open = event_bus.get()
+    portfolio.update_fill(fill_open)
+
+    # Partial close on Day 2
+    data_handler.update_bars() # Day 2
+    market_event_day2 = event_bus.get()
+    portfolio.update_timeindex(market_event_day2)
+    order_partial_close = OrderEvent("AAPL", "MKT", 40, "SELL")
+    execution_handler.execute_order(order_partial_close)
+    execution_handler.process_immediate_order(order_partial_close.order_id, market_event_day2)
+    fill_partial_close = event_bus.get()
+    portfolio.update_fill(fill_partial_close)
+
+    assert portfolio.current_positions['AAPL'] == 60
+    assert portfolio.open_positions_details['AAPL']['quantity'] == 60
+    assert len(portfolio.closed_trades) == 1
+    trade = portfolio.closed_trades[0]
+    assert trade['quantity'] == 40
+    assert trade['direction'] == 'LONG'
+    assert trade['pnl'] == pytest.approx((100.50 - 100.00) * 40 - ((fill_open.commission/100)*40 + fill_partial_close.commission))
+
+def test_portfolio_partial_close_short_position(setup_csv_data):
+    csv_dir = setup_csv_data
+    event_bus = EventBus()
+    symbol_list = ["AAPL"]
+    data_handler = CSVDataHandler(event_bus, str(csv_dir), symbol_list)
+    start_date = pd.Timestamp('2023-01-01')
+    portfolio = Portfolio(data_handler, event_bus, start_date, initial_capital=100000.0)
+    execution_handler = SimulatedExecutionHandler(event_bus, data_handler)
+
+    # Open short position
+    data_handler.update_bars() # Day 1
+    market_event_day1 = event_bus.get()
+    portfolio.update_timeindex(market_event_day1)
+    order_open = OrderEvent("AAPL", "MKT", 100, "SELL")
+    execution_handler.execute_order(order_open)
+    execution_handler.process_immediate_order(order_open.order_id, market_event_day1)
+    fill_open = event_bus.get()
+    portfolio.update_fill(fill_open)
+
+    # Partial close on Day 2
+    data_handler.update_bars() # Day 2
+    market_event_day2 = event_bus.get()
+    portfolio.update_timeindex(market_event_day2)
+    order_partial_close = OrderEvent("AAPL", "MKT", 40, "BUY")
+    execution_handler.execute_order(order_partial_close)
+    execution_handler.process_immediate_order(order_partial_close.order_id, market_event_day2)
+    fill_partial_close = event_bus.get()
+    portfolio.update_fill(fill_partial_close)
+
+    assert portfolio.current_positions['AAPL'] == -60
+    assert portfolio.open_positions_details['AAPL']['quantity'] == 60
+    assert len(portfolio.closed_trades) == 1
+    trade = portfolio.closed_trades[0]
+    assert trade['quantity'] == 40
+    assert trade['direction'] == 'SHORT'
+    assert trade['pnl'] == pytest.approx((100.00 - 100.50) * 40 - ((fill_open.commission/100)*40 + fill_partial_close.commission))
+
+def test_portfolio_add_to_long_position_averaging(setup_csv_data):
+    csv_dir = setup_csv_data
+    event_bus = EventBus()
+    symbol_list = ["AAPL"]
+    data_handler = CSVDataHandler(event_bus, str(csv_dir), symbol_list)
+    start_date = pd.Timestamp('2023-01-01')
+    portfolio = Portfolio(data_handler, event_bus, start_date, initial_capital=100000.0)
+    execution_handler = SimulatedExecutionHandler(event_bus, data_handler)
+
+    # First buy (Day 1)
+    data_handler.update_bars() # Day 1: Open=100.00
+    market_event_day1 = event_bus.get()
+    portfolio.update_timeindex(market_event_day1)
+    buy_order1 = OrderEvent("AAPL", "MKT", 50, "BUY")
+    execution_handler.execute_order(buy_order1)
+    execution_handler.process_immediate_order(buy_order1.order_id, market_event_day1)
+    fill_buy1 = event_bus.get()
+    portfolio.update_fill(fill_buy1)
+
+    # Second buy (Day 2)
+    data_handler.update_bars() # Day 2: Open=100.50
+    market_event_day2 = event_bus.get()
+    portfolio.update_timeindex(market_event_day2)
+    buy_order2 = OrderEvent("AAPL", "MKT", 50, "BUY")
+    execution_handler.execute_order(buy_order2)
+    execution_handler.process_immediate_order(buy_order2.order_id, market_event_day2)
+    fill_buy2 = event_bus.get()
+    portfolio.update_fill(fill_buy2)
+
+    assert portfolio.current_positions['AAPL'] == 100
+    assert portfolio.open_positions_details['AAPL']['quantity'] == 100
+    # (50 * 100.00 + 50 * 100.50) / 100 = 100.25
+    assert portfolio.open_positions_details['AAPL']['entry_price'] == pytest.approx(100.25)
+    assert portfolio.open_positions_details['AAPL']['total_entry_commission'] == pytest.approx(fill_buy1.commission + fill_buy2.commission)
+    assert not portfolio.closed_trades
+
+def test_portfolio_add_to_short_position_averaging(setup_csv_data):
+    csv_dir = setup_csv_data
+    event_bus = EventBus()
+    symbol_list = ["AAPL"]
+    data_handler = CSVDataHandler(event_bus, str(csv_dir), symbol_list)
+    start_date = pd.Timestamp('2023-01-01')
+    portfolio = Portfolio(data_handler, event_bus, start_date, initial_capital=100000.0)
+    execution_handler = SimulatedExecutionHandler(event_bus, data_handler)
+
+    # First sell (Day 1)
+    data_handler.update_bars() # Day 1: Open=100.00
+    market_event_day1 = event_bus.get()
+    portfolio.update_timeindex(market_event_day1)
+    sell_order1 = OrderEvent("AAPL", "MKT", 50, "SELL")
+    execution_handler.execute_order(sell_order1)
+    execution_handler.process_immediate_order(sell_order1.order_id, market_event_day1)
+    fill_sell1 = event_bus.get()
+    portfolio.update_fill(fill_sell1)
+
+    # Second sell (Day 2)
+    data_handler.update_bars() # Day 2: Open=100.50
+    market_event_day2 = event_bus.get()
+    portfolio.update_timeindex(market_event_day2)
+    sell_order2 = OrderEvent("AAPL", "MKT", 50, "SELL")
+    execution_handler.execute_order(sell_order2)
+    execution_handler.process_immediate_order(sell_order2.order_id, market_event_day2)
+    fill_sell2 = event_bus.get()
+    portfolio.update_fill(fill_sell2)
+
+    assert portfolio.current_positions['AAPL'] == -100
+    assert portfolio.open_positions_details['AAPL']['quantity'] == 100
+    # (50 * 100.00 + 50 * 100.50) / 100 = 100.25
+    assert portfolio.open_positions_details['AAPL']['entry_price'] == pytest.approx(100.25)
+    assert portfolio.open_positions_details['AAPL']['total_entry_commission'] == pytest.approx(fill_sell1.commission + fill_sell2.commission)
+    assert not portfolio.closed_trades
+
+def test_portfolio_reverse_long_to_short(setup_csv_data):
+    csv_dir = setup_csv_data
+    event_bus = EventBus()
+    symbol_list = ["AAPL"]
+    data_handler = CSVDataHandler(event_bus, str(csv_dir), symbol_list)
+    start_date = pd.Timestamp('2023-01-01')
+    portfolio = Portfolio(data_handler, event_bus, start_date, initial_capital=100000.0)
+    execution_handler = SimulatedExecutionHandler(event_bus, data_handler)
+
+    # Open long position (Day 1)
+    data_handler.update_bars() # Day 1: Open=100.00
+    market_event_day1 = event_bus.get()
+    portfolio.update_timeindex(market_event_day1)
+    buy_order = OrderEvent("AAPL", "MKT", 50, "BUY")
+    execution_handler.execute_order(buy_order)
+    execution_handler.process_immediate_order(buy_order.order_id, market_event_day1)
+    fill_buy = event_bus.get()
+    portfolio.update_fill(fill_buy)
+
+    # Sell more than held long (Day 2)
+    data_handler.update_bars() # Day 2: Open=100.50
+    market_event_day2 = event_bus.get()
+    portfolio.update_timeindex(market_event_day2)
+    sell_order = OrderEvent("AAPL", "MKT", 100, "SELL") # Sell 100, but only 50 held long
+    execution_handler.execute_order(sell_order)
+    execution_handler.process_immediate_order(sell_order.order_id, market_event_day2)
+    fill_sell = event_bus.get()
+    portfolio.update_fill(fill_sell)
+
+    assert portfolio.current_positions['AAPL'] == -50 # 50 long - 100 sell = -50 short
+    assert len(portfolio.closed_trades) == 1
+    closed_trade = portfolio.closed_trades[0]
+    assert closed_trade['quantity'] == 50 # Only the long position was closed
+    assert closed_trade['direction'] == 'LONG'
+    assert portfolio.open_positions_details['AAPL']['quantity'] == 50 # New short position
+    assert portfolio.open_positions_details['AAPL']['direction'] == 'SHORT'
+    assert portfolio.open_positions_details['AAPL']['entry_price'] == pytest.approx(100.50) # New short entry price
+
+def test_portfolio_reverse_short_to_long(setup_csv_data):
+    csv_dir = setup_csv_data
+    event_bus = EventBus()
+    symbol_list = ["AAPL"]
+    data_handler = CSVDataHandler(event_bus, str(csv_dir), symbol_list)
+    start_date = pd.Timestamp('2023-01-01')
+    portfolio = Portfolio(data_handler, event_bus, start_date, initial_capital=100000.0)
+    execution_handler = SimulatedExecutionHandler(event_bus, data_handler)
+
+    # Open short position (Day 1)
+    data_handler.update_bars() # Day 1: Open=100.00
+    market_event_day1 = event_bus.get()
+    portfolio.update_timeindex(market_event_day1)
+    sell_order = OrderEvent("AAPL", "MKT", 50, "SELL")
+    execution_handler.execute_order(sell_order)
+    execution_handler.process_immediate_order(sell_order.order_id, market_event_day1)
+    fill_sell = event_bus.get()
+    portfolio.update_fill(fill_sell)
+
+    # Buy more than held short (Day 2)
+    data_handler.update_bars() # Day 2: Open=100.50
+    market_event_day2 = event_bus.get()
+    portfolio.update_timeindex(market_event_day2)
+    buy_order = OrderEvent("AAPL", "MKT", 100, "BUY") # Buy 100, but only 50 held short
+    execution_handler.execute_order(buy_order)
+    execution_handler.process_immediate_order(buy_order.order_id, market_event_day2)
+    fill_buy = event_bus.get()
+    portfolio.update_fill(fill_buy)
+
+    assert portfolio.current_positions['AAPL'] == 50 # -50 short + 100 buy = 50 long
+    assert len(portfolio.closed_trades) == 1
+    closed_trade = portfolio.closed_trades[0]
+    assert closed_trade['quantity'] == 50 # Only the short position was closed
+    assert closed_trade['direction'] == 'SHORT'
+    assert portfolio.open_positions_details['AAPL']['quantity'] == 50 # New long position
+    assert portfolio.open_positions_details['AAPL']['direction'] == 'LONG'
+    assert portfolio.open_positions_details['AAPL']['entry_price'] == pytest.approx(100.50) # New long entry price

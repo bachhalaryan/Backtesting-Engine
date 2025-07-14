@@ -147,92 +147,132 @@ class Portfolio:
     def _track_trades_from_fill(self, fill_event):
         """
         Tracks individual trades (entry, exit, PnL, duration) based on fill events.
+        Handles opening, adding to, and closing both long and short positions.
         """
         symbol = fill_event.symbol
         fill_quantity = fill_event.quantity
         fill_price = fill_event.fill_cost / fill_quantity if fill_quantity != 0 else 0.0
         fill_time = fill_event.timeindex
-        fill_direction = fill_event.direction
+        fill_direction = fill_event.direction # 'BUY' or 'SELL'
 
-        current_position = self.current_positions[symbol]
+        # Helper to create a closed trade entry
+        def _create_closed_trade(entry_time, exit_time, entry_price, exit_price, quantity, direction, entry_commission, exit_commission):
+            pnl = 0.0
+            if direction == 'LONG':
+                pnl = (exit_price - entry_price) * quantity - (entry_commission + exit_commission)
+            elif direction == 'SHORT':
+                pnl = (entry_price - exit_price) * quantity - (entry_commission + exit_commission)
+            
+            trade = {
+                'symbol': symbol,
+                'entry_time': entry_time,
+                'exit_time': exit_time,
+                'entry_price': entry_price,
+                'exit_price': exit_price,
+                'quantity': quantity,
+                'direction': direction,
+                'pnl': pnl,
+                'commission': entry_commission + exit_commission,
+                'duration': (exit_time - entry_time).total_seconds() / (60*60*24) # Duration in days
+            }
+            self.closed_trades.append(trade)
+
+        # Get current open position details for the symbol
+        existing_pos = self.open_positions_details.get(symbol)
 
         if fill_direction == 'BUY':
-            # Opening or adding to a long position
-            if symbol not in self.open_positions_details:
-                self.open_positions_details[symbol] = {
-                    'entry_time': fill_time,
-                    'entry_price': fill_price,
-                    'quantity': fill_quantity,
-                    'direction': 'LONG',
-                    'commission': fill_event.commission
-                }
-            else:
-                # Average down/up
-                existing_pos = self.open_positions_details[symbol]
-                total_quantity = existing_pos['quantity'] + fill_quantity
-                existing_pos['entry_price'] = (existing_pos['entry_price'] * existing_pos['quantity'] + fill_price * fill_quantity) / total_quantity
-                existing_pos['quantity'] = total_quantity
-                existing_pos['commission'] += fill_event.commission
-
-        elif fill_direction == 'SELL':
-            # Closing or adding to a short position, or closing a long position
-            if symbol in self.open_positions_details:
-                # Closing an existing long position
-                existing_pos = self.open_positions_details[symbol]
+            if existing_pos and existing_pos['direction'] == 'SHORT':
+                # Closing (partially or fully) a short position
+                close_quantity = min(fill_quantity, existing_pos['quantity'])
                 
-                if existing_pos['direction'] == 'LONG':
-                    # Calculate PnL for the portion being closed
-                    pnl = (fill_price - existing_pos['entry_price']) * fill_quantity - fill_event.commission
-                    
-                    trade = {
-                        'symbol': symbol,
-                        'entry_time': existing_pos['entry_time'],
-                        'exit_time': fill_time,
-                        'entry_price': existing_pos['entry_price'],
-                        'exit_price': fill_price,
+                # Calculate proportional entry commission for the closed portion
+                entry_commission_for_closed_portion = (existing_pos['total_entry_commission'] / existing_pos['quantity']) * close_quantity
+
+                _create_closed_trade(
+                    existing_pos['entry_time'], fill_time,
+                    existing_pos['entry_price'], fill_price,
+                    close_quantity, 'SHORT',
+                    entry_commission_for_closed_portion, fill_event.commission
+                )
+                
+                existing_pos['quantity'] -= close_quantity
+                existing_pos['total_entry_commission'] -= entry_commission_for_closed_portion
+
+                if existing_pos['quantity'] <= 0:
+                    del self.open_positions_details[symbol]
+                
+                remaining_fill_quantity = fill_quantity - close_quantity
+                if remaining_fill_quantity > 0:
+                    # If remaining fill, it's opening a new long position
+                    self.open_positions_details[symbol] = {
+                        'entry_time': fill_time,
+                        'entry_price': fill_price,
+                        'quantity': remaining_fill_quantity,
+                        'direction': 'LONG',
+                        'total_entry_commission': fill_event.commission - (fill_event.commission / fill_quantity) * close_quantity # Adjust commission for the new position
+                    }
+            else:
+                # Opening or adding to a long position
+                if not existing_pos:
+                    self.open_positions_details[symbol] = {
+                        'entry_time': fill_time,
+                        'entry_price': fill_price,
                         'quantity': fill_quantity,
                         'direction': 'LONG',
-                        'pnl': pnl,
-                        'commission': existing_pos['commission'] + fill_event.commission,
-                        'duration': (fill_time - existing_pos['entry_time']).total_seconds() / (60*60*24) # Duration in days
+                        'total_entry_commission': fill_event.commission
                     }
-                    self.closed_trades.append(trade)
+                else: # existing_pos and existing_pos['direction'] == 'LONG'
+                    total_quantity = existing_pos['quantity'] + fill_quantity
+                    existing_pos['entry_price'] = (existing_pos['entry_price'] * existing_pos['quantity'] + fill_price * fill_quantity) / total_quantity
+                    existing_pos['quantity'] = total_quantity
+                    existing_pos['total_entry_commission'] += fill_event.commission
 
-                    # Update remaining quantity in open position
-                    existing_pos['quantity'] -= fill_quantity
-                    if existing_pos['quantity'] <= 0:
-                        del self.open_positions_details[symbol]
-                    else:
-                        # Adjust commission for remaining open position if partial close
-                        existing_pos['commission'] = (existing_pos['commission'] / (existing_pos['quantity'] + fill_quantity)) * existing_pos['quantity']
+        elif fill_direction == 'SELL':
+            if existing_pos and existing_pos['direction'] == 'LONG':
+                # Closing (partially or fully) a long position
+                close_quantity = min(fill_quantity, existing_pos['quantity'])
+
+                # Calculate proportional entry commission for the closed portion
+                entry_commission_for_closed_portion = (existing_pos['total_entry_commission'] / existing_pos['quantity']) * close_quantity
+
+                _create_closed_trade(
+                    existing_pos['entry_time'], fill_time,
+                    existing_pos['entry_price'], fill_price,
+                    close_quantity, 'LONG',
+                    entry_commission_for_closed_portion, fill_event.commission
+                )
+
+                existing_pos['quantity'] -= close_quantity
+                existing_pos['total_entry_commission'] -= entry_commission_for_closed_portion
+
+                if existing_pos['quantity'] <= 0:
+                    del self.open_positions_details[symbol]
                 
-                # TODO: Handle closing short positions and opening/adding to short positions
-                # This requires more complex logic to track short entries and exits.
-                # For now, assuming only long positions are tracked for simplicity.
+                remaining_fill_quantity = fill_quantity - close_quantity
+                if remaining_fill_quantity > 0:
+                    # If remaining fill, it's opening a new short position
+                    self.open_positions_details[symbol] = {
+                        'entry_time': fill_time,
+                        'entry_price': fill_price,
+                        'quantity': remaining_fill_quantity,
+                        'direction': 'SHORT',
+                        'total_entry_commission': fill_event.commission - (fill_event.commission / fill_quantity) * close_quantity # Adjust commission for the new position
+                    }
             else:
-                # This is a new short position or adding to an existing short position
-                # For now, we'll just record it as an open short position.
-                # A more robust solution would track short entries similar to long entries.
-                if symbol not in self.open_positions_details:
+                # Opening or adding to a short position
+                if not existing_pos:
                     self.open_positions_details[symbol] = {
                         'entry_time': fill_time,
                         'entry_price': fill_price,
                         'quantity': fill_quantity,
                         'direction': 'SHORT',
-                        'commission': fill_event.commission
+                        'total_entry_commission': fill_event.commission
                     }
-                else:
-                    existing_pos = self.open_positions_details[symbol]
-                    if existing_pos['direction'] == 'SHORT':
-                        total_quantity = existing_pos['quantity'] + fill_quantity
-                        existing_pos['entry_price'] = (existing_pos['entry_price'] * existing_pos['quantity'] + fill_price * fill_quantity) / total_quantity
-                        existing_pos['quantity'] = total_quantity
-                        existing_pos['commission'] += fill_event.commission
-                    else:
-                        # This means we are selling to close a long position, but there was no open_positions_details entry
-                        # This case should ideally not happen if tracking is perfect, but can occur with complex order types
-                        # or if initial positions are not properly set up.
-                        pass # Or log a warning
+                else: # existing_pos and existing_pos['direction'] == 'SHORT'
+                    total_quantity = existing_pos['quantity'] + fill_quantity
+                    existing_pos['entry_price'] = (existing_pos['entry_price'] * existing_pos['quantity'] + fill_price * fill_quantity) / total_quantity
+                    existing_pos['quantity'] = total_quantity
+                    existing_pos['total_entry_commission'] += fill_event.commission
         
 
     def generate_order(self, signal_event):
