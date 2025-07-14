@@ -385,3 +385,106 @@ def test_cancel_pending_order(setup_csv_data):
     execution_handler.update(market_event)
 
     assert event_bus.empty() # No fill event should be generated
+
+# --- Immediate Fill (Cheat) Order Tests ---
+
+def test_immediate_fill_market_buy_order(setup_csv_data):
+    csv_dir = setup_csv_data
+    event_bus = EventBus()
+    data_handler = CSVDataHandler(event_bus, str(csv_dir), ["AAPL"])
+    execution_handler = SimulatedExecutionHandler(event_bus, data_handler)
+
+    # Advance data handler to get a market event
+    data_handler.update_bars() # 2023-01-01
+    market_event = event_bus.get()
+
+    # Create an immediate fill market buy order
+    order = OrderEvent("AAPL", "MKT", 100, "BUY", immediate_fill=True)
+    execution_handler.execute_order(order)
+
+    # Manually call process_immediate_order as backtester would
+    execution_handler.process_immediate_order(order.order_id, market_event)
+
+    assert not event_bus.empty()
+    fill_event = event_bus.get()
+    assert fill_event.type == 'FILL'
+    assert fill_event.symbol == 'AAPL'
+    assert fill_event.quantity == 100
+    assert fill_event.direction == 'BUY'
+    assert fill_event.fill_cost == pytest.approx(100.00 * 100) # Filled at open price of 2023-01-01
+    assert execution_handler.orders.get(order.order_id) is None # Order should be removed
+
+def test_immediate_fill_market_sell_order(setup_csv_data):
+    csv_dir = setup_csv_data
+    event_bus = EventBus()
+    data_handler = CSVDataHandler(event_bus, str(csv_dir), ["AAPL"])
+    execution_handler = SimulatedExecutionHandler(event_bus, data_handler)
+
+    # Advance data handler to get a market event
+    data_handler.update_bars() # 2023-01-01
+    market_event = event_bus.get()
+
+    # Create an immediate fill market sell order
+    order = OrderEvent("AAPL", "MKT", 100, "SELL", immediate_fill=True)
+    execution_handler.execute_order(order)
+
+    # Manually call process_immediate_order as backtester would
+    execution_handler.process_immediate_order(order.order_id, market_event)
+
+    assert not event_bus.empty()
+    fill_event = event_bus.get()
+    assert fill_event.type == 'FILL'
+    assert fill_event.symbol == 'AAPL'
+    assert fill_event.quantity == 100
+    assert fill_event.direction == 'SELL'
+    assert fill_event.fill_cost == pytest.approx(100.00 * 100) # Filled at open price of 2023-01-01
+    assert execution_handler.orders.get(order.order_id) is None # Order should be removed
+
+def test_normal_then_immediate_order_same_bar(setup_csv_data):
+    csv_dir = setup_csv_data
+    event_bus = EventBus()
+    data_handler = CSVDataHandler(event_bus, str(csv_dir), ["AAPL"])
+    execution_handler = SimulatedExecutionHandler(event_bus, data_handler)
+
+    # Advance data handler to get a market event (2023-01-01)
+    data_handler.update_bars()
+    market_event_day1 = event_bus.get()
+
+    # 1. Place a normal market order (should NOT fill immediately)
+    normal_order = OrderEvent("AAPL", "MKT", 50, "BUY", immediate_fill=False)
+    execution_handler.execute_order(normal_order)
+    assert normal_order.order_id in execution_handler.orders # Should be pending
+
+    # 2. Place an immediate fill market order (should fill immediately)
+    immediate_order = OrderEvent("AAPL", "MKT", 100, "BUY", immediate_fill=True)
+    execution_handler.execute_order(immediate_order)
+    assert immediate_order.order_id in execution_handler.orders # Should be pending before immediate processing
+
+    # Simulate backtester's immediate processing for the cheat order
+    execution_handler.process_immediate_order(immediate_order.order_id, market_event_day1)
+
+    # Verify immediate order fill
+    assert not event_bus.empty()
+    fill_event_immediate = event_bus.get()
+    assert fill_event_immediate.type == 'FILL'
+    assert fill_event_immediate.quantity == 100
+    assert fill_event_immediate.fill_cost == pytest.approx(100.00 * 100) # Filled at 2023-01-01 open
+    assert execution_handler.orders.get(immediate_order.order_id) is None # Immediate order should be gone
+
+    # Verify normal order is *still pending*
+    assert normal_order.order_id in execution_handler.orders
+    assert event_bus.empty() # No fill event for normal order yet
+
+    # Advance to next bar (2023-01-02) and process market event
+    data_handler.update_bars()
+    market_event_day2 = event_bus.get()
+    execution_handler.update(market_event_day2) # This should process the normal order
+
+    # Verify normal order fill
+    assert not event_bus.empty()
+    fill_event_normal = event_bus.get()
+    assert fill_event_normal.type == 'FILL'
+    assert fill_event_normal.quantity == 50
+    assert fill_event_normal.fill_cost == pytest.approx(100.50 * 50) # Filled at 2023-01-02 open
+    assert execution_handler.orders.get(normal_order.order_id) is None # Normal order should be gone
+    assert event_bus.empty() # No more events

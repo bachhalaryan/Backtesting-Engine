@@ -47,6 +47,33 @@ class SimulatedExecutionHandler(ExecutionHandler):
             if event.order_id in self.orders:
                 del self.orders[event.order_id]
 
+    def process_immediate_order(self, order_id, market_event):
+        """
+        Processes a single order immediately using the provided market data.
+        This is used for "cheat" orders that need to be filled within the
+        same market bar they are generated.
+        """
+        if order_id in self.orders:
+            order = self.orders[order_id]
+            bar = self.bars.get_latest_bars(order.symbol)[0] # Use the latest bar from data handler
+            
+            # Update highest/lowest price seen for trailing stops if applicable
+            if order.order_type == 'TRAIL':
+                order.highest_price_seen = max(order.highest_price_seen, bar[1]['high'])
+                order.lowest_price_seen = min(order.lowest_price_seen, bar[1]['low'])
+
+            remaining_quantity = order.quantity - order.filled_quantity
+            if remaining_quantity <= 0:
+                del self.orders[order_id]
+                return
+
+            fill_event = self._check_order(order_id, order, remaining_quantity)
+            if fill_event:
+                self.events.put(fill_event)
+                order.filled_quantity += fill_event.quantity
+                if order.filled_quantity >= order.quantity:
+                    del self.orders[order_id]
+
     def update(self, event):
         """
         Updates the execution handler with the latest market data.

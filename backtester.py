@@ -30,6 +30,7 @@ class Backtester:
         self.orders = 0
         self.fills = 0
         self.num_strats = 1
+        self.current_market_event = None
 
         self._generate_trading_instances()
 
@@ -70,6 +71,7 @@ class Backtester:
                 else:
                     if event is not None:
                         if event.type == 'MARKET':
+                            self.current_market_event = event
                             self.strategy.calculate_signals(event)
                             self.portfolio.update_timeindex(event)
                             self.execution_handler.update(event)
@@ -79,6 +81,8 @@ class Backtester:
                         elif event.type == 'ORDER':
                             self.orders += 1
                             self.execution_handler.execute_order(event)
+                            if event.immediate_fill and self.current_market_event:
+                                self.execution_handler.process_immediate_order(event.order_id, self.current_market_event)
                         elif event.type == 'FILL':
                             self.fills += 1
                             self.portfolio.update_fill(event)

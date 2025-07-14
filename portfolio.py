@@ -134,13 +134,21 @@ class Portfolio:
         cur_quantity = self.current_positions[symbol]
 
         if signal_type == 'LONG' and cur_quantity == 0:
-            order = OrderEvent(symbol, 'MKT', mkt_quantity, 'BUY')
-        if signal_type == 'SHORT' and cur_quantity == 0:
-            order = OrderEvent(symbol, 'MKT', mkt_quantity, 'SELL')
-        if signal_type == 'EXIT' and cur_quantity > 0:
-            order = OrderEvent(symbol, 'MKT', abs(cur_quantity), 'SELL')
-        if signal_type == 'EXIT' and cur_quantity < 0:
-            order = OrderEvent(symbol, 'MKT', abs(cur_quantity), 'BUY')
+            order = OrderEvent(symbol, 'MKT', mkt_quantity, 'BUY', immediate_fill=False)
+        elif signal_type == 'SHORT' and cur_quantity == 0:
+            order = OrderEvent(symbol, 'MKT', mkt_quantity, 'SELL', immediate_fill=False)
+        elif signal_type == 'EXIT' and cur_quantity > 0:
+            order = OrderEvent(symbol, 'MKT', abs(cur_quantity), 'SELL', immediate_fill=False)
+        elif signal_type == 'EXIT' and cur_quantity < 0:
+            order = OrderEvent(symbol, 'MKT', abs(cur_quantity), 'BUY', immediate_fill=False)
+        elif signal_type == 'MKT_IMMEDIATE_LONG' and cur_quantity == 0:
+            order = OrderEvent(symbol, 'MKT', mkt_quantity, 'BUY', immediate_fill=True)
+        elif signal_type == 'MKT_IMMEDIATE_SHORT' and cur_quantity == 0:
+            order = OrderEvent(symbol, 'MKT', mkt_quantity, 'SELL', immediate_fill=True)
+        elif signal_type == 'MKT_IMMEDIATE_EXIT_LONG' and cur_quantity > 0:
+            order = OrderEvent(symbol, 'MKT', abs(cur_quantity), 'SELL', immediate_fill=True)
+        elif signal_type == 'MKT_IMMEDIATE_EXIT_SHORT' and cur_quantity < 0:
+            order = OrderEvent(symbol, 'MKT', abs(cur_quantity), 'BUY', immediate_fill=True)
 
         if order:
             self.events.put(order)

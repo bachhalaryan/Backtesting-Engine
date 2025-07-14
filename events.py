@@ -29,7 +29,7 @@ class OrderEvent(Event):
     """
     Handles the event of sending an Order to an ExecutionHandler.
     """
-    def __init__(self, symbol, order_type, quantity, direction, limit_price=None, stop_price=None, trail_price=None):
+    def __init__(self, symbol, order_type, quantity, direction, limit_price=None, stop_price=None, trail_price=None, immediate_fill=False):
         self.type = 'ORDER'
         self.symbol = symbol
         self.order_type = order_type
@@ -38,6 +38,7 @@ class OrderEvent(Event):
         self.limit_price = limit_price
         self.stop_price = stop_price
         self.trail_price = trail_price
+        self.immediate_fill = immediate_fill
         self.filled_quantity = 0
         self.highest_price_seen = -float('inf')
         self.lowest_price_seen = float('inf')
