@@ -30,6 +30,7 @@ class CSVDataHandler(DataHandler):
         self.latest_symbol_data = {}
         self.bar_generators = {} # Stores iterators for each symbol
         self.continue_backtest = True
+        self.current_time = None
         self._open_convert_csv_files()
 
     def _open_convert_csv_files(self):
@@ -80,18 +81,23 @@ class CSVDataHandler(DataHandler):
 
     def get_historical_bars(self, symbol, N=None):
         """
-        Returns the last N historical bars for a given symbol from the full dataset.
-        If N is None, returns all historical bars.
+        Returns the last N historical bars for a given symbol up to the current backtest time.
+        If N is None, returns all historical bars up to the current time.
         """
         if symbol not in self.symbol_data:
             print(f"Symbol {symbol} not found in historical data.")
             return pd.DataFrame()
-        
+
+        if self.current_time is None:
+            return pd.DataFrame() # No data to return if backtest hasn't started
+
+        # Filter the full dataframe up to the current backtest time
+        past_data = self.symbol_data[symbol].loc[:self.current_time]
+
         if N is None:
-            return self.symbol_data[symbol]
+            return past_data
         else:
-            # Ensure we don't try to return more bars than available
-            return self.symbol_data[symbol].iloc[-N:]
+            return past_data.tail(N)
 
     def update_bars(self):
         """
@@ -109,5 +115,5 @@ class CSVDataHandler(DataHandler):
                 self.latest_symbol_data[s].append(bar)
         if self.continue_backtest:
             # Get the current datetime from the latest bar of the first symbol
-            current_timeindex = self.latest_symbol_data[self.symbol_list[0]][-1][0]
-            self.events.put(MarketEvent(current_timeindex))
+            self.current_time = self.latest_symbol_data[self.symbol_list[0]][-1][0]
+            self.events.put(MarketEvent(self.current_time))

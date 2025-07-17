@@ -55,7 +55,6 @@ class SimulatedExecutionHandler(ExecutionHandler):
         if self.slippage_bps == 0:
             return price
         
-        slippage_amount = price * (self.slippage_bps / 10000.0)
         if direction == 'BUY':
             return price * (1 + self.slippage_bps / 10000.0)
         elif direction == 'SELL':

@@ -80,9 +80,9 @@ class Backtester:
                         try:
                             if event.type == 'MARKET':
                                 self.current_market_event = event
+                                self.execution_handler.update(event)
                                 self.strategy.calculate_signals(event)
                                 self.portfolio.update_timeindex(event)
-                                self.execution_handler.update(event)
                             elif event.type == 'SIGNAL':
                                 self.signals += 1
                                 self.portfolio.update_signal(event)

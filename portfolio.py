@@ -209,7 +209,7 @@ class Portfolio:
                         'entry_price': fill_price,
                         'quantity': remaining_fill_quantity,
                         'direction': 'LONG',
-                        'total_entry_commission': fill_event.commission - (fill_event.commission / fill_quantity) * close_quantity # Adjust commission for the new position
+                        'total_entry_commission': (fill_event.commission / fill_quantity) * remaining_fill_quantity if fill_quantity > 0 else 0
                     }
             else:
                 # Opening or adding to a long position
@@ -256,7 +256,7 @@ class Portfolio:
                         'entry_price': fill_price,
                         'quantity': remaining_fill_quantity,
                         'direction': 'SHORT',
-                        'total_entry_commission': fill_event.commission - (fill_event.commission / fill_quantity) * close_quantity # Adjust commission for the new position
+                        'total_entry_commission': (fill_event.commission / fill_quantity) * remaining_fill_quantity if fill_quantity > 0 else 0
                     }
             else:
                 # Opening or adding to a short position

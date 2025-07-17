@@ -245,16 +245,13 @@ class PerformanceAnalyzer:
             # For demonstration, let's use the data handler's internal symbol_data if available
             # This is a simplification and might not work directly if symbol_data is an iterator
             try:
-                # Attempt to get historical data from data_handler's internal storage
-                # This part is highly dependent on how your data_handler is implemented
-                # and might need a dedicated method in data_handler to retrieve historical range
-                historical_data_iter = self.data_handler.symbol_data[symbol]
-                # Convert iterator to list of bars, then to DataFrame
-                bars_list = []
-                for bar_tuple in historical_data_iter:
-                    # bar_tuple is (datetime, {'open': ..., 'high': ..., 'low': ..., 'close': ..., 'volume': ...})
-                    bars_list.append(bar_tuple[1])
-                historical_df = pd.DataFrame(bars_list, index=[bar[0] for bar in historical_data_iter])
+                # Use the data_handler's public method to get the full historical data
+                historical_df = self.data_handler.get_historical_bars(symbol)
+                if historical_df.empty:
+                    print(f"No historical data returned for {symbol}")
+                    continue
+                
+                # Filter the DataFrame for the required date range
                 historical_df = historical_df[(historical_df.index >= min_date) & (historical_df.index <= max_date)]
 
             except Exception as e:

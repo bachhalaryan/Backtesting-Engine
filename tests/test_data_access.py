@@ -46,6 +46,10 @@ def test_get_historical_bars_all_data(setup_csv_data):
     event_bus = EventBus()
     data_handler = CSVDataHandler(event_bus, str(csv_dir), ["AAPL"])
 
+    # Simulate backtest progression
+    for _ in range(10):
+        data_handler.update_bars()
+
     historical_data = data_handler.get_historical_bars("AAPL")
     assert isinstance(historical_data, pd.DataFrame)
     assert len(historical_data) == 10 # All 10 rows should be returned
@@ -56,6 +60,10 @@ def test_get_historical_bars_with_N(setup_csv_data):
     csv_dir = setup_csv_data
     event_bus = EventBus()
     data_handler = CSVDataHandler(event_bus, str(csv_dir), ["AAPL"])
+
+    # Simulate backtest progression
+    for _ in range(10):
+        data_handler.update_bars()
 
     historical_data = data_handler.get_historical_bars("AAPL", N=3)
     assert isinstance(historical_data, pd.DataFrame)
@@ -76,6 +84,10 @@ def test_get_historical_bars_multiple_symbols(setup_csv_data):
     csv_dir = setup_csv_data
     event_bus = EventBus()
     data_handler = CSVDataHandler(event_bus, str(csv_dir), ["AAPL", "GOOG"])
+
+    # Simulate backtest progression
+    for _ in range(10):
+        data_handler.update_bars()
 
     aapl_data = data_handler.get_historical_bars("AAPL", N=2)
     assert len(aapl_data) == 2
