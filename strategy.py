@@ -1,4 +1,7 @@
 from events import SignalEvent
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Strategy:
     """
@@ -36,18 +39,18 @@ class BuyAndHoldStrategy(Strategy):
             # Demonstrate accessing historical data
             historical_bars = self.data_handler.get_historical_bars(self.symbol, N=3)
             if not historical_bars.empty:
-                print(f"Strategy: Latest 3 historical bars for {self.symbol}:\n{historical_bars}")
+                logger.debug(f"Latest 3 historical bars for {self.symbol}:\n{historical_bars}")
 
             # Demonstrate accessing portfolio and execution handler state
-            print(f"Strategy: Current cash: {self.portfolio.current_holdings['cash']:.2f}")
-            print(f"Strategy: Current {self.symbol} position: {self.portfolio.current_positions[self.symbol]}")
-            print(f"Strategy: Open orders: {len(self.execution_handler.orders)}")
+            logger.debug(f"Current cash: {self.portfolio.current_holdings['cash']:.2f}")
+            logger.debug(f"Current {self.symbol} position: {self.portfolio.current_positions[self.symbol]}")
+            logger.debug(f"Open orders: {len(self.execution_handler.orders)}")
 
             current_price = self.data_handler.get_latest_bars(self.symbol)[0][1]['close']
 
             if not self.bought and self.bar_count == 1:
                 # Initial Market Buy Order
-                print("Strategy: Placing initial Market BUY order.")
+                logger.info("Placing initial Market BUY order.")
                 signal = SignalEvent(1, self.symbol, event.timeindex, 'LONG', 1.0,
                                      sizing_type='FIXED_SHARES', sizing_value=100,
                                      order_type='MKT', immediate_fill=False)
@@ -57,7 +60,7 @@ class BuyAndHoldStrategy(Strategy):
             elif self.bought and self.bar_count == 3:
                 # Limit Buy Order (buy if price drops)
                 limit_price = current_price * 0.95 # 5% below current price
-                print(f"Strategy: Placing Limit BUY order at {limit_price:.2f}.")
+                logger.info(f"Placing Limit BUY order at {limit_price:.2f}.")
                 signal = SignalEvent(1, self.symbol, event.timeindex, 'LONG', 1.0,
                                      sizing_type='FIXED_SHARES', sizing_value=50,
                                      order_type='LMT', limit_price=limit_price)
@@ -66,7 +69,7 @@ class BuyAndHoldStrategy(Strategy):
             elif self.bought and self.bar_count == 5:
                 # Stop Sell Order (sell if price rises significantly)
                 stop_price = current_price * 1.05 # 5% above current price
-                print(f"Strategy: Placing Stop SELL order at {stop_price:.2f}.")
+                logger.info(f"Placing Stop SELL order at {stop_price:.2f}.")
                 signal = SignalEvent(1, self.symbol, event.timeindex, 'EXIT', 1.0,
                                      sizing_type='FIXED_SHARES', sizing_value=self.portfolio.current_positions[self.symbol],
                                      order_type='STP', stop_price=stop_price)
@@ -75,7 +78,7 @@ class BuyAndHoldStrategy(Strategy):
             elif self.bought and self.bar_count == 7:
                 # Trailing Stop Sell Order
                 trail_price_offset = current_price * 0.02 # 2% trailing stop
-                print(f"Strategy: Placing Trailing Stop SELL order with offset {trail_price_offset:.2f}.")
+                logger.info(f"Placing Trailing Stop SELL order with offset {trail_price_offset:.2f}.")
                 signal = SignalEvent(1, self.symbol, event.timeindex, 'EXIT', 1.0,
                                      sizing_type='FIXED_SHARES', sizing_value=self.portfolio.current_positions[self.symbol],
                                      order_type='TRAIL', trail_price=trail_price_offset)
@@ -83,7 +86,7 @@ class BuyAndHoldStrategy(Strategy):
 
             elif self.bought and self.bar_count == 9:
                 # Immediate Fill Market Buy Order (for demonstration of immediate_fill)
-                print("Strategy: Placing Immediate Fill Market BUY order.")
+                logger.info("Placing Immediate Fill Market BUY order.")
                 signal = SignalEvent(1, self.symbol, event.timeindex, 'LONG', 1.0,
                                      sizing_type='FIXED_SHARES', sizing_value=20,
                                      order_type='MKT', immediate_fill=True)
@@ -91,7 +94,7 @@ class BuyAndHoldStrategy(Strategy):
 
             elif self.bought and self.bar_count == 10:
                 # Final Exit Market Order
-                print("Strategy: Placing final Market EXIT order.")
+                logger.info("Placing final Market EXIT order.")
                 signal = SignalEvent(1, self.symbol, event.timeindex, 'EXIT', 1.0,
                                      sizing_type='FIXED_SHARES', sizing_value=self.portfolio.current_positions[self.symbol],
                                      order_type='MKT', immediate_fill=False)

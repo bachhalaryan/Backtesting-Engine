@@ -1,4 +1,7 @@
 from events import FillEvent, OrderEvent
+import logging
+
+logger = logging.getLogger(__name__)
 
 class CommissionCalculator:
     """
@@ -157,7 +160,9 @@ class SimulatedExecutionHandler(ExecutionHandler):
 
         fill_cost = fill_price * fill_quantity
         commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-        return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+        fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+        logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+        return fill_event
 
     def _fill_limit_order(self, order_id, order, bar, remaining_quantity):
         """
@@ -173,7 +178,9 @@ class SimulatedExecutionHandler(ExecutionHandler):
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
                 commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+                fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+                logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+                return fill_event
         elif order.direction == 'SELL':
             if bar[1]['open'] >= order.limit_price:
                 fill_price = bar[1]['open']
@@ -182,7 +189,9 @@ class SimulatedExecutionHandler(ExecutionHandler):
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
                 commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+                fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+                logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+                return fill_event
             elif bar[1]['high'] >= order.limit_price:
                 fill_price = order.limit_price
                 fill_price = self._apply_slippage(fill_price, order.direction)
@@ -190,7 +199,9 @@ class SimulatedExecutionHandler(ExecutionHandler):
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
                 commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+                fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+                logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+                return fill_event
         return None
 
     def _fill_stop_order(self, order_id, order, bar, remaining_quantity):
@@ -211,7 +222,9 @@ class SimulatedExecutionHandler(ExecutionHandler):
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
                 commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+                fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+                logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+                return fill_event
         elif order.direction == 'SELL':
             if bar[1]['low'] <= order.stop_price:
                 fill_price = order.stop_price
@@ -224,7 +237,9 @@ class SimulatedExecutionHandler(ExecutionHandler):
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
                 commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+                fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+                logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+                return fill_event
         return None
 
     def _fill_stop_limit_order(self, order_id, order, bar, remaining_quantity):
@@ -243,7 +258,9 @@ class SimulatedExecutionHandler(ExecutionHandler):
                     partial_fill = fill_quantity < remaining_quantity
                     fill_cost = fill_price * fill_quantity
                     commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-                    return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+                    fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+                    logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+                    return fill_event
         elif order.direction == 'SELL':
             if bar[1]['low'] <= order.stop_price:
                 # Stop triggered, now check limit condition
@@ -254,7 +271,9 @@ class SimulatedExecutionHandler(ExecutionHandler):
                     partial_fill = fill_quantity < remaining_quantity
                     fill_cost = fill_price * fill_quantity
                     commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-                    return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+                    fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+                    logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+                    return fill_event
         return None
 
     def _fill_trailing_stop_order(self, order_id, order, bar, remaining_quantity):
@@ -279,7 +298,9 @@ class SimulatedExecutionHandler(ExecutionHandler):
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
                 commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+                fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+                logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+                return fill_event
         elif order.direction == 'SELL':
             # Update lowest price seen
             order.lowest_price_seen = min(order.lowest_price_seen, bar[1]['low'])
@@ -296,5 +317,7 @@ class SimulatedExecutionHandler(ExecutionHandler):
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
                 commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-                return FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+                fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
+                logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+                return fill_event
         return None

@@ -2,6 +2,9 @@ import os
 import json
 import pandas as pd
 import shutil
+import logging
+
+logger = logging.getLogger(__name__)
 
 class BacktestManager:
     """
@@ -53,7 +56,7 @@ class BacktestManager:
             if os.path.exists(filepath):
                 os.rename(filepath, os.path.join(backtest_path, os.path.basename(filepath)))
 
-        print(f"Backtest results saved to: {backtest_path}")
+        logger.info(f"Backtest results saved to: {backtest_path}")
 
     def load_backtest(self, backtest_name):
         """
@@ -61,7 +64,7 @@ class BacktestManager:
         """
         backtest_path = self._get_backtest_path(backtest_name)
         if not os.path.exists(backtest_path):
-            print(f"Backtest '{backtest_name}' not found at {backtest_path}")
+            logger.warning(f"Backtest '{backtest_name}' not found at {backtest_path}")
             return None
 
         loaded_data = {}
@@ -102,5 +105,5 @@ class BacktestManager:
             if f.endswith((".png", ".jpg", ".html"))
         }
 
-        print(f"Backtest results loaded from: {backtest_path}")
+        logger.info(f"Backtest results loaded from: {backtest_path}")
         return loaded_data

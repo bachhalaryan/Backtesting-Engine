@@ -1,6 +1,7 @@
 import datetime
 import queue
 import os
+import logging
 from event_bus import EventBus
 
 from data_handler import CSVDataHandler
@@ -10,6 +11,9 @@ from execution_handler import SimulatedExecutionHandler, FixedCommissionCalculat
 from events import MarketEvent, SignalEvent, OrderEvent, FillEvent
 from performance_analyzer import PerformanceAnalyzer
 from backtest_manager import BacktestManager
+from logging_config import setup_logging
+
+logger = logging.getLogger(__name__)
 
 class Backtester:
     """
@@ -60,6 +64,7 @@ class Backtester:
         """
         Executes the backtest.
         """
+        logger.info("Starting backtest...")
         i = 0
         while True:
             i += 1
@@ -67,6 +72,7 @@ class Backtester:
             if self.data_handler.continue_backtest:
                 self.data_handler.update_bars()
             else:
+                logger.info("End of data reached. Halting backtest.")
                 break
 
             # Handle events
@@ -97,21 +103,23 @@ class Backtester:
                             elif event.type == 'CANCEL_ORDER':
                                 self.execution_handler.execute_order(event)
                         except Exception as e:
-                            print(f"Error processing event {event.type}: {e}")
+                            logger.error(f"Error processing event {event.type}: {e}", exc_info=True)
 
     def simulate_trading(self):
         """
         Simulates the backtest and outputs portfolio performance.
         """
+        setup_logging()
         self._run_backtest()
         self.portfolio.create_equity_curve_dataframe()
 
         # --- Performance Analysis and Reporting ---
+        logger.info("Calculating performance metrics...")
         performance_analyzer = PerformanceAnalyzer(self.portfolio, self.data_handler)
         metrics = performance_analyzer.calculate_metrics()
 
         # Define backtest name and parameters for saving
-        backtest_name = f"backtest_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}"
+        backtest_name = f"backtest_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
         backtest_params = {
             "initial_capital": self.initial_capital,
             "start_date": str(self.start_date),
@@ -138,6 +146,7 @@ class Backtester:
         }
 
         # Generate plots directly into the backtest_run_dir
+        logger.info("Generating performance plots...")
         performance_analyzer.generate_equity_curve_matplotlib(plot_filepaths["equity_curve_matplotlib"])
         performance_analyzer.generate_drawdown_matplotlib(plot_filepaths["drawdown_matplotlib"])
         performance_analyzer.generate_equity_curve_plotly(plot_filepaths["equity_curve_plotly"])
@@ -145,6 +154,7 @@ class Backtester:
         performance_analyzer.generate_trades_plotly(plot_filepaths["trades_plotly"])
 
         # Save backtest results (plots are already in place)
+        logger.info("Saving backtest results...")
         backtest_manager.save_backtest(
             backtest_name,
             self.portfolio,
@@ -153,8 +163,8 @@ class Backtester:
             plot_filepaths # Pass the paths for recording, not for moving
         )
 
-        print("\n--- Backtest Summary ---")
+        logger.info("--- Backtest Summary ---")
         for key, value in metrics.items():
-            print(f"{key}: {value:.2f}")
-        print("------------------------")
-        print(f"Detailed results saved to: {backtest_manager.base_dir}/{backtest_name}")
+            logger.info(f"{key}: {value:.2f}")
+        logger.info("------------------------")
+        logger.info(f"Detailed results saved to: {backtest_manager.base_dir}/{backtest_name}")

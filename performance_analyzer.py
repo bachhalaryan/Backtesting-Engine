@@ -3,6 +3,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from datetime import timedelta
+import logging
+
+logger = logging.getLogger(__name__)
 
 class PerformanceAnalyzer:
     """
@@ -220,7 +223,7 @@ class PerformanceAnalyzer:
         Generates and saves an interactive Plotly plot showing trades overlaid on price data.
         """
         if not self.closed_trades:
-            print("No closed trades to plot.")
+            logger.info("No closed trades to plot.")
             return
 
         # Get all unique symbols traded
@@ -255,11 +258,11 @@ class PerformanceAnalyzer:
                 historical_df = historical_df[(historical_df.index >= min_date) & (historical_df.index <= max_date)]
 
             except Exception as e:
-                print(f"Could not retrieve historical data for {symbol}: {e}")
+                logger.error(f"Could not retrieve historical data for {symbol}: {e}", exc_info=True)
                 continue # Skip this symbol if data cannot be fetched
 
             if historical_df.empty:
-                print(f"No historical data for {symbol} in the specified range.")
+                logger.warning(f"No historical data for {symbol} in the specified range.")
                 continue
 
             # Plot candlestick chart

@@ -1,5 +1,8 @@
 from events import OrderEvent
 import pandas as pd
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Portfolio:
     """
@@ -300,7 +303,7 @@ class Portfolio:
         mkt_quantity = self._calculate_quantity(symbol, sizing_type, sizing_value, signal_type)
 
         if mkt_quantity <= 0:
-            print(f"Warning: Calculated quantity for {symbol} is zero or negative. No order generated.")
+            logger.warning(f"Calculated quantity for {symbol} is zero or negative. No order generated.")
             return
 
         cur_quantity = self.current_positions[symbol]
@@ -319,7 +322,7 @@ class Portfolio:
                 direction = 'BUY'
                 mkt_quantity = abs(cur_quantity) # Exit full position
             else:
-                print(f"Warning: EXIT signal for {symbol} but no open position. No order generated.")
+                logger.warning(f"EXIT signal for {symbol} but no open position. No order generated.")
                 return
 
         if direction:
@@ -327,6 +330,7 @@ class Portfolio:
                                limit_price=limit_price, stop_price=stop_price, trail_price=trail_price,
                                immediate_fill=immediate_fill)
             self.events.put(order)
+            logger.info(f"Order created: {direction} {mkt_quantity} {symbol} ({order_type})")
 
     def update_signal(self, event):
         """

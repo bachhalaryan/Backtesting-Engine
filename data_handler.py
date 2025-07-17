@@ -1,5 +1,8 @@
 import pandas as pd
+import logging
 from events import MarketEvent
+
+logger = logging.getLogger(__name__)
 
 class DataHandler:
     """
@@ -40,14 +43,21 @@ class CSVDataHandler(DataHandler):
         For this handler, all CSV files are assumed to have
         the columns of 'datetime', 'open', 'high', 'low', 'close', 'volume'.
         """
+        logger.info("Loading and preparing historical data...")
         comb_index = None
         for s in self.symbol_list:
             # Load the CSV file with no header information,
             # indexed on datetime
             file_path = f"{self.csv_dir}/{s}.csv"
-            self.symbol_data[s] = pd.read_csv(
-                file_path, header=0, index_col=0, parse_dates=True
-            )
+            try:
+                self.symbol_data[s] = pd.read_csv(
+                    file_path, header=0, index_col=0, parse_dates=True
+                )
+                logger.debug(f"Successfully loaded {file_path} for symbol {s}")
+            except FileNotFoundError:
+                logger.error(f"CSV file not found for symbol {s} at {file_path}")
+                # Decide how to handle this - e.g., skip the symbol or raise an exception
+                continue # Skip this symbol
 
             if comb_index is None:
                 comb_index = self.symbol_data[s].index
@@ -56,10 +66,12 @@ class CSVDataHandler(DataHandler):
 
         # Reindex the dataframes
         for s in self.symbol_list:
-            self.symbol_data[s] = self.symbol_data[s].reindex(
-                index=comb_index, method='pad'
-            )
-        self.bar_generators = {s: self.symbol_data[s].iterrows() for s in self.symbol_list}
+            if s in self.symbol_data:
+                self.symbol_data[s] = self.symbol_data[s].reindex(
+                    index=comb_index, method='pad'
+                )
+        self.bar_generators = {s: self.symbol_data[s].iterrows() for s in self.symbol_list if s in self.symbol_data}
+        logger.info("Historical data loaded and prepared.")
 
     def _get_new_bar(self, symbol):
         """
@@ -74,7 +86,7 @@ class CSVDataHandler(DataHandler):
         try:
             bars_list = self.latest_symbol_data[symbol]
         except KeyError:
-            print("This symbol is not available in the historical data set.")
+            logger.warning(f"No historical data for symbol {symbol} yet.")
             return [] # Return empty list if symbol not found
         else:
             return bars_list[-N:]
@@ -85,10 +97,11 @@ class CSVDataHandler(DataHandler):
         If N is None, returns all historical bars up to the current time.
         """
         if symbol not in self.symbol_data:
-            print(f"Symbol {symbol} not found in historical data.")
+            logger.error(f"Symbol {symbol} not found in historical data set.")
             return pd.DataFrame()
 
         if self.current_time is None:
+            logger.warning("Backtest has not started, no historical data to return.")
             return pd.DataFrame() # No data to return if backtest hasn't started
 
         # Filter the full dataframe up to the current backtest time
