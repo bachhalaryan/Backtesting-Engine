@@ -76,7 +76,7 @@ class TestStressStrategy(unittest.TestCase):
         self.assertEqual(trades[1]['direction'], 'SHORT')
 
         # Trade 3: Final exit of the small long position
-        self.assertEqual(trades[2]['entry_price'], 100.0)
+        self.assertEqual(trades[2]['entry_price'], 99.0)
         self.assertEqual(trades[2]['exit_price'], 100.0)
         self.assertEqual(trades[2]['quantity'], 5)
         self.assertEqual(trades[2]['direction'], 'LONG')

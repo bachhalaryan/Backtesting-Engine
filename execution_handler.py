@@ -3,19 +3,25 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class CommissionCalculator:
     """
     Base class for commission calculation strategies.
     """
+
     def calculate_commission(self, quantity, fill_cost):
         raise NotImplementedError("Should implement calculate_commission()")
+
 
 class FixedCommissionCalculator(CommissionCalculator):
     """
     Calculates commission based on a fixed rate per share with a minimum.
     Example: Interactive Brokers-style commission ($0.0035 per share, min $0.35).
     """
-    def __init__(self, rate_per_share=0.0035, min_commission=0.35, max_commission_pct=0.01):
+
+    def __init__(
+        self, rate_per_share=0.0035, min_commission=0.35, max_commission_pct=0.01
+    ):
         self.rate_per_share = rate_per_share
         self.min_commission = min_commission
         self.max_commission_pct = max_commission_pct
@@ -24,11 +30,12 @@ class FixedCommissionCalculator(CommissionCalculator):
         commission = self.rate_per_share * quantity
         if commission < self.min_commission:
             commission = self.min_commission
-        
+
         max_commission_based_on_value = self.max_commission_pct * fill_cost
         if commission > max_commission_based_on_value:
             commission = max_commission_based_on_value
         return commission
+
 
 class ExecutionHandler:
     """
@@ -36,8 +43,10 @@ class ExecutionHandler:
     between a set of order objects and the actual market placement
     and receipt of fills for those orders.
     """
+
     def execute_order(self, event):
         raise NotImplementedError("Should implement execute_order()")
+
 
 class SimulatedExecutionHandler(ExecutionHandler):
     """
@@ -45,22 +54,34 @@ class SimulatedExecutionHandler(ExecutionHandler):
     This is to ensure that it has access to the latest bars and can
     appropriately simulate the fill of orders.
     """
-    def __init__(self, events, bars, slippage_bps=0, partial_fill_volume_pct=1.0, commission_calculator=None):
+
+    def __init__(
+        self,
+        events,
+        bars,
+        slippage_bps=0,
+        partial_fill_volume_pct=1.0,
+        commission_calculator=None,
+    ):
         self.events = events
         self.bars = bars
         self.orders = {}
         self.order_id = 0
         self.slippage_bps = slippage_bps
         self.partial_fill_volume_pct = partial_fill_volume_pct
-        self.commission_calculator = commission_calculator if commission_calculator is not None else FixedCommissionCalculator()
+        self.commission_calculator = (
+            commission_calculator
+            if commission_calculator is not None
+            else FixedCommissionCalculator()
+        )
 
     def _apply_slippage(self, price, direction):
         if self.slippage_bps == 0:
             return price
-        
-        if direction == 'BUY':
+
+        if direction == "BUY":
             return price * (1 + self.slippage_bps / 10000.0)
-        elif direction == 'SELL':
+        elif direction == "SELL":
             return price * (1 - self.slippage_bps / 10000.0)
         return price
 
@@ -68,12 +89,12 @@ class SimulatedExecutionHandler(ExecutionHandler):
         """
         Simulates the execution of an order.
         """
-        if event.type == 'ORDER':
+        if event.type == "ORDER":
             self.order_id += 1
-            event.order_id = self.order_id # Assign order_id to the event
+            event.order_id = self.order_id  # Assign order_id to the event
             self.orders[self.order_id] = event
 
-        elif event.type == 'CANCEL_ORDER':
+        elif event.type == "CANCEL_ORDER":
             if event.order_id in self.orders:
                 del self.orders[event.order_id]
 
@@ -85,12 +106,14 @@ class SimulatedExecutionHandler(ExecutionHandler):
         """
         if order_id in self.orders:
             order = self.orders[order_id]
-            bar = self.bars.get_latest_bars(order.symbol)[0] # Use the latest bar from data handler
-            
+            bar = self.bars.get_latest_bars(order.symbol)[
+                0
+            ]  # Use the latest bar from data handler
+
             # Update highest/lowest price seen for trailing stops if applicable
-            if order.order_type == 'TRAIL':
-                order.highest_price_seen = max(order.highest_price_seen, bar[1]['high'])
-                order.lowest_price_seen = min(order.lowest_price_seen, bar[1]['low'])
+            if order.order_type == "TRAIL":
+                order.highest_price_seen = max(order.highest_price_seen, bar[1]["high"])
+                order.lowest_price_seen = min(order.lowest_price_seen, bar[1]["low"])
 
             remaining_quantity = order.quantity - order.filled_quantity
             if remaining_quantity <= 0:
@@ -108,14 +131,17 @@ class SimulatedExecutionHandler(ExecutionHandler):
         """
         Updates the execution handler with the latest market data.
         """
-        if event.type == 'MARKET':
+        if event.type == "MARKET":
             for order_id, order in list(self.orders.items()):
-                
                 # Update highest/lowest price seen for trailing stops
                 bar = self.bars.get_latest_bars(order.symbol)[0]
-                if order.order_type == 'TRAIL':
-                    order.highest_price_seen = max(order.highest_price_seen, bar[1]['high'])
-                    order.lowest_price_seen = min(order.lowest_price_seen, bar[1]['low'])
+                if order.order_type == "TRAIL":
+                    order.highest_price_seen = max(
+                        order.highest_price_seen, bar[1]["high"]
+                    )
+                    order.lowest_price_seen = min(
+                        order.lowest_price_seen, bar[1]["low"]
+                    )
 
                 # Calculate remaining quantity
                 remaining_quantity = order.quantity - order.filled_quantity
@@ -135,72 +161,130 @@ class SimulatedExecutionHandler(ExecutionHandler):
         Checks if an order has been filled.
         """
         bar = self.bars.get_latest_bars(order.symbol)[0]
-        if order.order_type == 'MKT':
+        if order.order_type == "MKT":
             return self._fill_market_order(order_id, order, bar, remaining_quantity)
-        elif order.order_type == 'LMT':
+        elif order.order_type == "LMT":
             return self._fill_limit_order(order_id, order, bar, remaining_quantity)
-        elif order.order_type == 'STP':
+        elif order.order_type == "STP":
             return self._fill_stop_order(order_id, order, bar, remaining_quantity)
-        elif order.order_type == 'STP_LMT':
+        elif order.order_type == "STP_LMT":
             return self._fill_stop_limit_order(order_id, order, bar, remaining_quantity)
-        elif order.order_type == 'TRAIL':
-            return self._fill_trailing_stop_order(order_id, order, bar, remaining_quantity)
+        elif order.order_type == "TRAIL":
+            return self._fill_trailing_stop_order(
+                order_id, order, bar, remaining_quantity
+            )
         return None
 
     def _fill_market_order(self, order_id, order, bar, remaining_quantity):
         """
         Fills a market order.
         """
-        fill_price = bar[1]['open']
+        fill_price = bar[1]["open"]
         fill_price = self._apply_slippage(fill_price, order.direction)
 
-        max_fill_quantity = int(bar[1]['volume'] * self.partial_fill_volume_pct)
+        max_fill_quantity = int(bar[1]["volume"] * self.partial_fill_volume_pct)
         fill_quantity = min(remaining_quantity, max_fill_quantity)
         partial_fill = fill_quantity < remaining_quantity
 
         fill_cost = fill_price * fill_quantity
-        commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-        fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
-        logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+        commission = self.commission_calculator.calculate_commission(
+            fill_quantity, fill_cost
+        )
+        fill_event = FillEvent(
+            bar[0],
+            order.symbol,
+            "ARCA",
+            fill_quantity,
+            order.direction,
+            fill_cost,
+            commission=commission,
+            order_id=order_id,
+            partial_fill=partial_fill,
+        )
+        logger.info(
+            f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}"
+        )
         return fill_event
 
     def _fill_limit_order(self, order_id, order, bar, remaining_quantity):
         """
         Fills a limit order.
         """
-        max_fill_quantity = int(bar[1]['volume'] * self.partial_fill_volume_pct)
+        max_fill_quantity = int(bar[1]["volume"] * self.partial_fill_volume_pct)
 
-        if order.direction == 'BUY':
-            if bar[1]['low'] <= order.limit_price:
-                fill_price = min(bar[1]['open'], order.limit_price)
+        if order.direction == "BUY":
+            if bar[1]["low"] <= order.limit_price:
+                fill_price = min(bar[1]["open"], order.limit_price)
                 fill_price = self._apply_slippage(fill_price, order.direction)
                 fill_quantity = min(remaining_quantity, max_fill_quantity)
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
-                commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-                fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
-                logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+                commission = self.commission_calculator.calculate_commission(
+                    fill_quantity, fill_cost
+                )
+                fill_event = FillEvent(
+                    bar[0],
+                    order.symbol,
+                    "ARCA",
+                    fill_quantity,
+                    order.direction,
+                    fill_cost,
+                    commission=commission,
+                    order_id=order_id,
+                    partial_fill=partial_fill,
+                )
+                logger.info(
+                    f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}"
+                )
                 return fill_event
-        elif order.direction == 'SELL':
-            if bar[1]['open'] >= order.limit_price:
-                fill_price = bar[1]['open']
+        elif order.direction == "SELL":
+            if bar[1]["open"] >= order.limit_price:
+                fill_price = bar[1]["open"]
                 fill_price = self._apply_slippage(fill_price, order.direction)
                 fill_quantity = min(remaining_quantity, max_fill_quantity)
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
-                commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-                fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
-                logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+                commission = self.commission_calculator.calculate_commission(
+                    fill_quantity, fill_cost
+                )
+                fill_event = FillEvent(
+                    bar[0],
+                    order.symbol,
+                    "ARCA",
+                    fill_quantity,
+                    order.direction,
+                    fill_cost,
+                    commission=commission,
+                    order_id=order_id,
+                    partial_fill=partial_fill,
+                )
+                logger.info(
+                    f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}"
+                )
                 return fill_event
-            elif bar[1]['high'] >= order.limit_price:
+            elif bar[1]["high"] >= order.limit_price:
                 fill_price = order.limit_price
                 fill_price = self._apply_slippage(fill_price, order.direction)
                 fill_quantity = min(remaining_quantity, max_fill_quantity)
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
-                commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-                fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
-                logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+                commission = self.commission_calculator.calculate_commission(
+                    fill_quantity, fill_cost
+                )
+                fill_event = FillEvent(
+                    bar[0],
+                    order.symbol,
+                    "ARCA",
+                    fill_quantity,
+                    order.direction,
+                    fill_cost,
+                    commission=commission,
+                    order_id=order_id,
+                    partial_fill=partial_fill,
+                )
+                logger.info(
+                    f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}"
+                )
                 return fill_event
         return None
 
@@ -208,37 +292,71 @@ class SimulatedExecutionHandler(ExecutionHandler):
         """
         Fills a stop order.
         """
-        max_fill_quantity = int(bar[1]['volume'] * self.partial_fill_volume_pct)
+        max_fill_quantity = int(bar[1]["volume"] * self.partial_fill_volume_pct)
 
-        if order.direction == 'BUY':
-            if bar[1]['high'] >= order.stop_price:
+        if order.direction == "BUY":
+            if bar[1]["high"] >= order.stop_price:
                 fill_price = order.stop_price
-                if bar[1]['open'] >= order.stop_price:
-                    fill_price = bar[1]['open']
-                if bar[1]['high'] >= order.stop_price and bar[1]['open'] < order.stop_price:
-                    fill_price = bar[1]['high'] # Cheat on high
+                if bar[1]["open"] >= order.stop_price:
+                    fill_price = bar[1]["open"]
+                if (
+                    bar[1]["high"] >= order.stop_price
+                    and bar[1]["open"] < order.stop_price
+                ):
+                    fill_price = bar[1]["high"]  # Cheat on high
                 fill_price = self._apply_slippage(fill_price, order.direction)
                 fill_quantity = min(remaining_quantity, max_fill_quantity)
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
-                commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-                fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
-                logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+                commission = self.commission_calculator.calculate_commission(
+                    fill_quantity, fill_cost
+                )
+                fill_event = FillEvent(
+                    bar[0],
+                    order.symbol,
+                    "ARCA",
+                    fill_quantity,
+                    order.direction,
+                    fill_cost,
+                    commission=commission,
+                    order_id=order_id,
+                    partial_fill=partial_fill,
+                )
+                logger.info(
+                    f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}"
+                )
                 return fill_event
-        elif order.direction == 'SELL':
-            if bar[1]['low'] <= order.stop_price:
+        elif order.direction == "SELL":
+            if bar[1]["low"] <= order.stop_price:
                 fill_price = order.stop_price
-                if bar[1]['open'] <= order.stop_price:
-                    fill_price = bar[1]['open']
-                if bar[1]['low'] <= order.stop_price and bar[1]['open'] > order.stop_price:
-                    fill_price = bar[1]['low'] # Cheat on low
+                if bar[1]["open"] <= order.stop_price:
+                    fill_price = bar[1]["open"]
+                if (
+                    bar[1]["low"] <= order.stop_price
+                    and bar[1]["open"] > order.stop_price
+                ):
+                    fill_price = bar[1]["low"]  # Cheat on low
                 fill_price = self._apply_slippage(fill_price, order.direction)
                 fill_quantity = min(remaining_quantity, max_fill_quantity)
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
-                commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-                fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
-                logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+                commission = self.commission_calculator.calculate_commission(
+                    fill_quantity, fill_cost
+                )
+                fill_event = FillEvent(
+                    bar[0],
+                    order.symbol,
+                    "ARCA",
+                    fill_quantity,
+                    order.direction,
+                    fill_cost,
+                    commission=commission,
+                    order_id=order_id,
+                    partial_fill=partial_fill,
+                )
+                logger.info(
+                    f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}"
+                )
                 return fill_event
         return None
 
@@ -246,33 +364,61 @@ class SimulatedExecutionHandler(ExecutionHandler):
         """
         Fills a stop-limit order.
         """
-        max_fill_quantity = int(bar[1]['volume'] * self.partial_fill_volume_pct)
+        max_fill_quantity = int(bar[1]["volume"] * self.partial_fill_volume_pct)
 
-        if order.direction == 'BUY':
-            if bar[1]['high'] >= order.stop_price:
+        if order.direction == "BUY":
+            if bar[1]["high"] >= order.stop_price:
                 # Stop triggered, now check limit condition
-                if bar[1]['low'] <= order.limit_price:
-                    fill_price = min(bar[1]['open'], order.limit_price)
+                if bar[1]["low"] <= order.limit_price:
+                    fill_price = min(bar[1]["open"], order.limit_price)
                     fill_price = self._apply_slippage(fill_price, order.direction)
                     fill_quantity = min(remaining_quantity, max_fill_quantity)
                     partial_fill = fill_quantity < remaining_quantity
                     fill_cost = fill_price * fill_quantity
-                    commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-                    fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
-                    logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+                    commission = self.commission_calculator.calculate_commission(
+                        fill_quantity, fill_cost
+                    )
+                    fill_event = FillEvent(
+                        bar[0],
+                        order.symbol,
+                        "ARCA",
+                        fill_quantity,
+                        order.direction,
+                        fill_cost,
+                        commission=commission,
+                        order_id=order_id,
+                        partial_fill=partial_fill,
+                    )
+                    logger.info(
+                        f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}"
+                    )
                     return fill_event
-        elif order.direction == 'SELL':
-            if bar[1]['low'] <= order.stop_price:
+        elif order.direction == "SELL":
+            if bar[1]["low"] <= order.stop_price:
                 # Stop triggered, now check limit condition
-                if bar[1]['high'] >= order.limit_price:
-                    fill_price = max(bar[1]['open'], order.limit_price)
+                if bar[1]["high"] >= order.limit_price:
+                    fill_price = max(bar[1]["open"], order.limit_price)
                     fill_price = self._apply_slippage(fill_price, order.direction)
                     fill_quantity = min(remaining_quantity, max_fill_quantity)
                     partial_fill = fill_quantity < remaining_quantity
                     fill_cost = fill_price * fill_quantity
-                    commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-                    fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
-                    logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+                    commission = self.commission_calculator.calculate_commission(
+                        fill_quantity, fill_cost
+                    )
+                    fill_event = FillEvent(
+                        bar[0],
+                        order.symbol,
+                        "ARCA",
+                        fill_quantity,
+                        order.direction,
+                        fill_cost,
+                        commission=commission,
+                        order_id=order_id,
+                        partial_fill=partial_fill,
+                    )
+                    logger.info(
+                        f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}"
+                    )
                     return fill_event
         return None
 
@@ -280,44 +426,72 @@ class SimulatedExecutionHandler(ExecutionHandler):
         """
         Fills a trailing stop order.
         """
-        max_fill_quantity = int(bar[1]['volume'] * self.partial_fill_volume_pct)
+        max_fill_quantity = int(bar[1]["volume"] * self.partial_fill_volume_pct)
 
-        if order.direction == 'BUY':
+        if order.direction == "BUY":
             # Update highest price seen
-            order.highest_price_seen = max(order.highest_price_seen, bar[1]['high'])
-            
+            order.highest_price_seen = max(order.highest_price_seen, bar[1]["high"])
+
             # Calculate trailing stop price
             trail_price = order.highest_price_seen - order.trail_price
 
-            if bar[1]['low'] <= trail_price:
+            if bar[1]["low"] <= trail_price:
                 fill_price = trail_price
-                if bar[1]['open'] <= trail_price:
-                    fill_price = bar[1]['open']
+                if bar[1]["open"] <= trail_price:
+                    fill_price = bar[1]["open"]
                 fill_price = self._apply_slippage(fill_price, order.direction)
                 fill_quantity = min(remaining_quantity, max_fill_quantity)
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
-                commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-                fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
-                logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+                commission = self.commission_calculator.calculate_commission(
+                    fill_quantity, fill_cost
+                )
+                fill_event = FillEvent(
+                    bar[0],
+                    order.symbol,
+                    "ARCA",
+                    fill_quantity,
+                    order.direction,
+                    fill_cost,
+                    commission=commission,
+                    order_id=order_id,
+                    partial_fill=partial_fill,
+                )
+                logger.info(
+                    f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}"
+                )
                 return fill_event
-        elif order.direction == 'SELL':
+        elif order.direction == "SELL":
             # Update lowest price seen
-            order.lowest_price_seen = min(order.lowest_price_seen, bar[1]['low'])
+            order.lowest_price_seen = min(order.lowest_price_seen, bar[1]["low"])
 
             # Calculate trailing stop price
             trail_price = order.lowest_price_seen + order.trail_price
 
-            if bar[1]['high'] >= trail_price:
+            if bar[1]["high"] >= trail_price:
                 fill_price = trail_price
-                if bar[1]['open'] >= trail_price:
-                    fill_price = bar[1]['open']
+                if bar[1]["open"] >= trail_price:
+                    fill_price = bar[1]["open"]
                 fill_price = self._apply_slippage(fill_price, order.direction)
                 fill_quantity = min(remaining_quantity, max_fill_quantity)
                 partial_fill = fill_quantity < remaining_quantity
                 fill_cost = fill_price * fill_quantity
-                commission = self.commission_calculator.calculate_commission(fill_quantity, fill_cost)
-                fill_event = FillEvent(bar[0], order.symbol, 'ARCA', fill_quantity, order.direction, fill_cost, commission=commission, order_id=order_id, partial_fill=partial_fill)
-                logger.info(f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}")
+                commission = self.commission_calculator.calculate_commission(
+                    fill_quantity, fill_cost
+                )
+                fill_event = FillEvent(
+                    bar[0],
+                    order.symbol,
+                    "ARCA",
+                    fill_quantity,
+                    order.direction,
+                    fill_cost,
+                    commission=commission,
+                    order_id=order_id,
+                    partial_fill=partial_fill,
+                )
+                logger.info(
+                    f"Order {order_id} filled: {fill_event.direction} {fill_event.quantity} {fill_event.symbol} @ {fill_price:.2f}, Cost: {fill_cost:.2f}, Commission: {commission:.2f}, Partial: {partial_fill}"
+                )
                 return fill_event
         return None

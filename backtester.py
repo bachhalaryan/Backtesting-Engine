@@ -113,9 +113,21 @@ class Backtester:
                         self.orders += 1
                         self.execution_handler.execute_order(event)
                         if event.immediate_fill and self.current_market_event:
-                            # This immediate fill will be processed in the next bar's Stage 1
-                            # which is the correct, realistic behavior.
+                            # Process immediate fills right away to update portfolio state within the same bar
                             self.execution_handler.process_immediate_order(event.order_id, self.current_market_event)
+                            # After processing immediate order, check for any generated FILL events and process them
+                            while True:
+                                try:
+                                    fill_event = self.events.get(False)
+                                except queue.Empty:
+                                    break
+                                if fill_event.type == 'FILL':
+                                    self.fills += 1
+                                    self.portfolio.update_fill(fill_event)
+                                else:
+                                    # If it's not a FILL event, put it back and break
+                                    self.events.put(fill_event)
+                                    break
                     elif event.type == 'CANCEL_ORDER':
                         self.execution_handler.execute_order(event)
 
