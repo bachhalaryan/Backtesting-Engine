@@ -62,7 +62,7 @@ class Backtester:
 
     def _run_backtest(self):
         """
-        Executes the backtest.
+        Executes the backtest using a two-stage event loop to ensure data consistency.
         """
         logger.info("Starting backtest...")
         i = 0
@@ -70,40 +70,55 @@ class Backtester:
             i += 1
             # Update the market bars
             if self.data_handler.continue_backtest:
-                self.data_handler.update_bars()
+                self.data_handler.update_bars() # Puts a MARKET event on the queue
             else:
                 logger.info("End of data reached. Halting backtest.")
                 break
 
-            # Handle events
+            # Stage 1: Process market and fill events to update portfolio state
+            # This loop will run until the queue is empty of MARKET and FILL events
+            while True:
+                try:
+                    event = self.events.get(False)
+                except queue.Empty:
+                    break
+
+                if event.type == 'MARKET':
+                    self.current_market_event = event
+                    self.portfolio.update_timeindex(event)
+                    self.execution_handler.update(event) # May queue FILL events
+                elif event.type == 'FILL':
+                    self.fills += 1
+                    self.portfolio.update_fill(event)
+                else:
+                    # Put other events back on the queue to be processed in Stage 2
+                    self.events.put(event)
+                    break # Move to Stage 2
+
+            # Stage 2: Generate new signals and process resulting orders
+            # The strategy now runs with a fully updated portfolio
+            if self.current_market_event:
+                self.strategy.calculate_signals(self.current_market_event)
+
             while True:
                 try:
                     event = self.events.get(False)
                 except queue.Empty:
                     break
                 else:
-                    if event is not None:
-                        try:
-                            if event.type == 'MARKET':
-                                self.current_market_event = event
-                                self.execution_handler.update(event)
-                                self.strategy.calculate_signals(event)
-                                self.portfolio.update_timeindex(event)
-                            elif event.type == 'SIGNAL':
-                                self.signals += 1
-                                self.portfolio.update_signal(event)
-                            elif event.type == 'ORDER':
-                                self.orders += 1
-                                self.execution_handler.execute_order(event)
-                                if event.immediate_fill and self.current_market_event:
-                                    self.execution_handler.process_immediate_order(event.order_id, self.current_market_event)
-                            elif event.type == 'FILL':
-                                self.fills += 1
-                                self.portfolio.update_fill(event)
-                            elif event.type == 'CANCEL_ORDER':
-                                self.execution_handler.execute_order(event)
-                        except Exception as e:
-                            logger.error(f"Error processing event {event.type}: {e}", exc_info=True)
+                    if event.type == 'SIGNAL':
+                        self.signals += 1
+                        self.portfolio.update_signal(event)
+                    elif event.type == 'ORDER':
+                        self.orders += 1
+                        self.execution_handler.execute_order(event)
+                        if event.immediate_fill and self.current_market_event:
+                            # This immediate fill will be processed in the next bar's Stage 1
+                            # which is the correct, realistic behavior.
+                            self.execution_handler.process_immediate_order(event.order_id, self.current_market_event)
+                    elif event.type == 'CANCEL_ORDER':
+                        self.execution_handler.execute_order(event)
+
 
     def simulate_trading(self):
         """

@@ -1,10 +1,25 @@
 import os
 import json
 import pandas as pd
+import numpy as np
 import shutil
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def convert_numpy_types(obj):
+    if isinstance(obj, dict):
+        return {k: convert_numpy_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(i) for i in obj]
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    return obj
 
 class BacktestManager:
     """
@@ -49,7 +64,7 @@ class BacktestManager:
 
         # Save performance metrics
         with open(os.path.join(backtest_path, "performance_metrics.json"), "w") as f:
-            json.dump(performance_metrics, f, indent=4)
+            json.dump(convert_numpy_types(performance_metrics), f, indent=4)
 
         # Copy plots to the backtest directory
         for plot_type, filepath in plot_filepaths.items():

@@ -299,9 +299,6 @@ class Portfolio:
         trail_price = signal_event.trail_price
         immediate_fill = signal_event.immediate_fill
 
-        # Calculate quantity based on sizing options
-        mkt_quantity = self._calculate_quantity(symbol, sizing_type, sizing_value, signal_type)
-
         if mkt_quantity <= 0:
             logger.warning(f"Calculated quantity for {symbol} is zero or negative. No order generated.")
             return
