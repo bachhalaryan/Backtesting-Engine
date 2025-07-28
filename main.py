@@ -3,7 +3,7 @@ import logging
 from backtester import Backtester
 from data_handler import CSVDataHandler
 from portfolio import Portfolio
-from execution_handler import SimulatedExecutionHandler
+from execution_handler import SimulatedExecutionHandler, FixedCommissionCalculator
 from strategy import BuyAndHoldStrategy, StressTestStrategy
 from strategies.ema_rsi_strategy import EmaRsiStrategy
 
@@ -22,6 +22,8 @@ if __name__ == "__main__":
         'rsi_threshold': 70
     }
 
+    commission_calculator = FixedCommissionCalculator(rate_per_share=0.0, min_commission=0.0)
+
     backtester = Backtester(
         csv_dir,
         symbol_list,
@@ -32,6 +34,7 @@ if __name__ == "__main__":
         SimulatedExecutionHandler,
         Portfolio,
         EmaRsiStrategy,
-        strategy_params=strategy_params
+        strategy_params=strategy_params,
+        commission_calculator=commission_calculator
     )
     backtester.simulate_trading(log_level=logging.ERROR)
