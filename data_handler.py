@@ -51,8 +51,9 @@ class CSVDataHandler(DataHandler):
             file_path = f"{self.csv_dir}/{s}.csv"
             try:
                 self.symbol_data[s] = pd.read_csv(
-                    file_path, header=0, index_col=0, parse_dates=True
+                    file_path, header=0, index_col=0, parse_dates=True, nrows=1000
                 )
+                self.symbol_data[s].columns = [col.lower() for col in self.symbol_data[s].columns]
                 logger.debug(f"Successfully loaded {file_path} for symbol {s}")
             except FileNotFoundError:
                 logger.error(f"CSV file not found for symbol {s} at {file_path}")

@@ -1,18 +1,26 @@
 import datetime
-
+import logging
 from backtester import Backtester
 from data_handler import CSVDataHandler
 from portfolio import Portfolio
 from execution_handler import SimulatedExecutionHandler
 from strategy import BuyAndHoldStrategy, StressTestStrategy
+from strategies.ema_rsi_strategy import EmaRsiStrategy
 
 if __name__ == "__main__":
     # Example usage:
-    csv_dir = "./data"  # Assuming your CSV data is in a 'data' folder
-    symbol_list = ["STRESSTEST"] # Example symbol
+    csv_dir = "./data"
+    symbol_list = ["EURUSD"]
     initial_capital = 100000.0
-    start_date = datetime.datetime(2023, 1, 1) # Example start date
-    heartbeat = 0.0 # Not used in this simulated backtester
+    start_date = datetime.datetime(2020, 1, 1)
+    heartbeat = 0.0
+
+    strategy_params = {
+        'short_window': 20,
+        'long_window': 50,
+        'rsi_window': 14,
+        'rsi_threshold': 70
+    }
 
     backtester = Backtester(
         csv_dir,
@@ -23,6 +31,7 @@ if __name__ == "__main__":
         CSVDataHandler,
         SimulatedExecutionHandler,
         Portfolio,
-        StressTestStrategy
+        EmaRsiStrategy,
+        strategy_params=strategy_params
     )
-    backtester.simulate_trading()
+    backtester.simulate_trading(log_level=logging.ERROR)

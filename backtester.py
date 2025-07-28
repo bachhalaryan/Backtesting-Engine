@@ -22,7 +22,7 @@ class Backtester:
     """
     def __init__(self, csv_dir, symbol_list, initial_capital, 
                  start_date, heartbeat, data_handler, 
-                 execution_handler, portfolio, strategy):
+                 execution_handler, portfolio, strategy, strategy_params=None):
         self.csv_dir = csv_dir
         self.symbol_list = symbol_list
         self.initial_capital = initial_capital
@@ -32,6 +32,7 @@ class Backtester:
         self.execution_handler_cls = execution_handler
         self.portfolio_cls = portfolio
         self.strategy_cls = strategy
+        self.strategy_params = strategy_params or {}
 
         self.events = EventBus()
         self.signals = 0
@@ -58,7 +59,8 @@ class Backtester:
                                           self.events, 
                                           self.data_handler, 
                                           self.portfolio, 
-                                          self.execution_handler)
+                                          self.execution_handler,
+                                          **self.strategy_params)
 
     def _run_backtest(self):
         """
@@ -132,11 +134,11 @@ class Backtester:
                         self.execution_handler.execute_order(event)
 
 
-    def simulate_trading(self):
+    def simulate_trading(self, log_level=logging.INFO):
         """
         Simulates the backtest and outputs portfolio performance.
         """
-        setup_logging()
+        setup_logging(log_level=log_level)
         self._run_backtest()
         self.portfolio.create_equity_curve_dataframe()
 
