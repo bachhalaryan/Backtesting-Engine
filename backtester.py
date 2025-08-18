@@ -23,7 +23,7 @@ class Backtester:
     def __init__(self, csv_dir, symbol_list, initial_capital, 
                  start_date, heartbeat, data_handler, 
                  execution_handler, portfolio, strategy, strategy_params=None, commission_calculator=None,
-                 start_date_filter=None, end_date_filter=None, bars_from_end=None):
+                 start_date_filter=None, end_date_filter=None, bars_from_end=None, resample_interval=None):
         self.csv_dir = csv_dir
         self.symbol_list = symbol_list
         self.initial_capital = initial_capital
@@ -38,6 +38,7 @@ class Backtester:
         self.start_date_filter = start_date_filter
         self.end_date_filter = end_date_filter
         self.bars_from_end = bars_from_end
+        self.resample_interval = resample_interval
 
         self.events = EventBus()
         self.signals = 0
@@ -57,7 +58,8 @@ class Backtester:
                                                   self.symbol_list,
                                                   start_date=self.start_date_filter,
                                                   end_date=self.end_date_filter,
-                                                  bars_from_end=self.bars_from_end)
+                                                  bars_from_end=self.bars_from_end,
+                                                  resample_interval=self.resample_interval)
         self.portfolio = self.portfolio_cls(self.data_handler, 
                                            self.events, 
                                            self.start_date, 

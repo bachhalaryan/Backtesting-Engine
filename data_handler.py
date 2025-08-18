@@ -30,13 +30,14 @@ class CSVDataHandler(DataHandler):
     and provide an interface to obtain the latest bar of
     each symbol as well as updating the bars.
     """
-    def __init__(self, events, csv_dir, symbol_list, start_date=None, end_date=None, bars_from_end=None):
+    def __init__(self, events, csv_dir, symbol_list, start_date=None, end_date=None, bars_from_end=None, resample_interval=None):
         self.events = events
         self.csv_dir = csv_dir
         self.symbol_list = symbol_list
         self.start_date = start_date
         self.end_date = end_date
         self.bars_from_end = bars_from_end
+        self.resample_interval = resample_interval
 
         self.symbol_data = {} # Stores the full DataFrame for each symbol
         self.latest_symbol_data = {}
@@ -73,6 +74,29 @@ class CSVDataHandler(DataHandler):
 
                 self.symbol_data[s] = df
                 self.symbol_data[s].columns = [col.lower() for col in self.symbol_data[s].columns]
+
+                # Resample data if interval is provided
+                if self.resample_interval:
+                    logger.info(f"Resampling {s} data to {self.resample_interval} interval...")
+                    # Define aggregation rules for OHLCV
+                    ohlcv_dict = {
+                        'open': 'first',
+                        'high': 'max',
+                        'low': 'min',
+                        'close': 'last',
+                        'volume': 'sum'
+                    }
+                    # Apply resampling and aggregation
+                    resampled_df = self.symbol_data[s].resample(self.resample_interval).agg(
+                        open=('open', 'first'),
+                        high=('high', 'max'),
+                        low=('low', 'min'),
+                        close=('close', 'last'),
+                        volume=('volume', 'sum')
+                    )
+                    resampled_df.dropna(inplace=True) # Drop rows that might result from resampling (e.g., weekends)
+                    self.symbol_data[s] = resampled_df
+                    logger.debug(f"Resampling of {s} data complete. New shape: {self.symbol_data[s].shape}")
                 logger.debug(f"Successfully loaded {file_path} for symbol {s}")
             except FileNotFoundError:
                 logger.error(f"CSV file not found for symbol {s} at {file_path}")

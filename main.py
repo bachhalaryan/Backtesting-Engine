@@ -56,6 +56,24 @@ if __name__ == "__main__":
     # )
 
     # --- Example 3: Backtest on a specific date range ---
+    # --- Example 3: Backtest on a specific date range ---
+    # backtester = Backtester(
+    #     csv_dir,
+    #     symbol_list,
+    #     initial_capital,
+    #     start_date,
+    #     heartbeat,
+    #     CSVDataHandler,
+    #     SimulatedExecutionHandler,
+    #     Portfolio,
+    #     EmaRsiStrategy,
+    #     strategy_params=strategy_params,
+    #     commission_calculator=commission_calculator,
+    #     start_date_filter=datetime.datetime(2021, 1, 1),
+    #     end_date_filter=datetime.datetime(2021, 12, 31)
+    # )
+
+    # --- Example 4: Backtest with resampling (e.g., to 1 hour) ---
     backtester = Backtester(
         csv_dir,
         symbol_list,
@@ -68,7 +86,6 @@ if __name__ == "__main__":
         EmaRsiStrategy,
         strategy_params=strategy_params,
         commission_calculator=commission_calculator,
-        start_date_filter=datetime.datetime(2021, 1, 1),
-        end_date_filter=datetime.datetime(2021, 12, 31)
+        resample_interval="1H" # Resample to 1 hour bars
     )
     backtester.simulate_trading(log_level=logging.ERROR)
