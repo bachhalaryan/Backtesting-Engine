@@ -249,7 +249,7 @@ class PerformanceAnalyzer:
             # This is a simplification and might not work directly if symbol_data is an iterator
             try:
                 # Use the data_handler's public method to get the full historical data
-                historical_df = self.data_handler.get_historical_bars(symbol)
+                historical_df = self.data_handler.get_bars(symbol)
                 if historical_df.empty:
                     print(f"No historical data returned for {symbol}")
                     continue

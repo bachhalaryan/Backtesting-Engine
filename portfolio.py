@@ -30,7 +30,7 @@ class Portfolio:
         """
         Calculates the quantity of shares based on the sizing type and value.
         """
-        current_price = self.bars.get_latest_bars(symbol)[0][1]['close']
+        current_price = self.bars.get_latest_bars(symbol).iloc[-1]['close']
         if current_price == 0:
             return 0 # Avoid division by zero
 
@@ -93,7 +93,7 @@ class Portfolio:
         market data bar. This reflects the PREVIOUS bar's holdings
         prior to any new orders being executed.
         """
-        latest_datetime = self.bars.get_latest_bars(self.symbol_list[0])[0][0]
+        latest_datetime = self.bars.get_latest_bars(self.symbol_list[0]).index[-1]
 
         # Update positions
         dp = dict((k, v) for k, v in [(s, 0) for s in self.symbol_list])
@@ -111,7 +111,7 @@ class Portfolio:
 
         for s in self.symbol_list:
             # Approximate the real time value
-            market_value = self.bars.get_latest_bars(s)[0][1]['close']
+            market_value = self.bars.get_latest_bars(s).iloc[-1]['close']
             dh[s] = self.current_positions[s] * market_value
             dh['total'] += dh[s]
         self.all_holdings.append(dh)

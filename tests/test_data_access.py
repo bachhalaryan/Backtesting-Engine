@@ -41,7 +41,7 @@ datetime,open,high,low,close,volume
 
     return csv_dir
 
-def test_get_historical_bars_all_data(setup_csv_data):
+def test_get_bars_all_data(setup_csv_data):
     csv_dir = setup_csv_data
     event_bus = EventBus()
     data_handler = CSVDataHandler(event_bus, str(csv_dir), ["AAPL"])
@@ -50,13 +50,13 @@ def test_get_historical_bars_all_data(setup_csv_data):
     for _ in range(10):
         data_handler.update_bars()
 
-    historical_data = data_handler.get_historical_bars("AAPL")
+    historical_data = data_handler.get_bars("AAPL")
     assert isinstance(historical_data, pd.DataFrame)
     assert len(historical_data) == 10 # All 10 rows should be returned
     assert historical_data.index[0] == pd.Timestamp('2023-01-01')
     assert historical_data.index[-1] == pd.Timestamp('2023-01-10')
 
-def test_get_historical_bars_with_N(setup_csv_data):
+def test_get_bars_with_N(setup_csv_data):
     csv_dir = setup_csv_data
     event_bus = EventBus()
     data_handler = CSVDataHandler(event_bus, str(csv_dir), ["AAPL"])
@@ -65,22 +65,22 @@ def test_get_historical_bars_with_N(setup_csv_data):
     for _ in range(10):
         data_handler.update_bars()
 
-    historical_data = data_handler.get_historical_bars("AAPL", N=3)
+    historical_data = data_handler.get_bars("AAPL", N=3)
     assert isinstance(historical_data, pd.DataFrame)
     assert len(historical_data) == 3
     assert historical_data.index[0] == pd.Timestamp('2023-01-08')
     assert historical_data.index[-1] == pd.Timestamp('2023-01-10')
 
-def test_get_historical_bars_non_existent_symbol(setup_csv_data):
+def test_get_bars_non_existent_symbol(setup_csv_data):
     csv_dir = setup_csv_data
     event_bus = EventBus()
     data_handler = CSVDataHandler(event_bus, str(csv_dir), ["AAPL"])
 
-    historical_data = data_handler.get_historical_bars("NONEXISTENT")
+    historical_data = data_handler.get_bars("NONEXISTENT")
     assert isinstance(historical_data, pd.DataFrame)
     assert historical_data.empty
 
-def test_get_historical_bars_multiple_symbols(setup_csv_data):
+def test_get_bars_multiple_symbols(setup_csv_data):
     csv_dir = setup_csv_data
     event_bus = EventBus()
     data_handler = CSVDataHandler(event_bus, str(csv_dir), ["AAPL", "GOOG"])
@@ -89,10 +89,10 @@ def test_get_historical_bars_multiple_symbols(setup_csv_data):
     for _ in range(10):
         data_handler.update_bars()
 
-    aapl_data = data_handler.get_historical_bars("AAPL", N=2)
+    aapl_data = data_handler.get_bars("AAPL", N=2)
     assert len(aapl_data) == 2
     assert aapl_data.index[0] == pd.Timestamp('2023-01-09')
 
-    goog_data = data_handler.get_historical_bars("GOOG")
+    goog_data = data_handler.get_bars("GOOG")
     assert len(goog_data) == 10 # GOOG data will be reindexed to match AAPL length
     assert goog_data.index[0] == pd.Timestamp('2023-01-01')

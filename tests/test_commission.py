@@ -75,8 +75,8 @@ def test_simulated_execution_handler_commission_on_fill(setup_simulated_executio
     exec_handler.execute_order(order)
 
     # Simulate a market event to trigger fill processing
-    market_data = exec_handler.bars.get_latest_bars("AAPL")[0]
-    market_event = MarketEvent(market_data[0]) # Create MarketEvent from timeindex
+    market_data_df = exec_handler.bars.get_latest_bars("AAPL", N=1)
+    market_event = MarketEvent(market_data_df.index[0]) # Create MarketEvent from timeindex
     exec_handler.update(market_event)
 
     # Get the fill event from the queue
@@ -103,8 +103,8 @@ def test_simulated_execution_handler_commission_on_partial_fill(setup_simulated_
     exec_handler.execute_order(order)
 
     # Simulate a market event to trigger fill processing
-    market_data = exec_handler.bars.get_latest_bars("AAPL")[0]
-    market_event = MarketEvent(market_data[0])
+    market_data_df = exec_handler.bars.get_latest_bars("AAPL", N=1)
+    market_event = MarketEvent(market_data_df.index[0])
     exec_handler.update(market_event)
 
     # Get the first partial fill event
@@ -121,8 +121,8 @@ def test_simulated_execution_handler_commission_on_partial_fill(setup_simulated_
     assert fill_event1.commission == 35.0
 
     # Simulate another market event for the remaining quantity
-    market_data = exec_handler.bars.get_latest_bars("AAPL")[0]
-    market_event = MarketEvent(market_data[0])
+    market_data_df = exec_handler.bars.get_latest_bars("AAPL", N=1)
+    market_event = MarketEvent(market_data_df.index[0])
     exec_handler.update(market_event)
 
     # Get the second partial fill event
@@ -139,8 +139,8 @@ def test_simulated_execution_handler_commission_on_partial_fill(setup_simulated_
 
     # Continue until order is fully filled (remaining 30000 shares)
     for _ in range(3):
-        market_data = exec_handler.bars.get_latest_bars("AAPL")[0]
-        market_event = MarketEvent(market_data[0])
+        market_data_df = exec_handler.bars.get_latest_bars("AAPL", N=1)
+        market_event = MarketEvent(market_data_df.index[0])
         exec_handler.update(market_event)
         fill_event = events.get(False)
         assert isinstance(fill_event, FillEvent)

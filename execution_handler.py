@@ -106,9 +106,9 @@ class SimulatedExecutionHandler(ExecutionHandler):
         """
         if order_id in self.orders:
             order = self.orders[order_id]
-            bar = self.bars.get_latest_bars(order.symbol)[
-                0
-            ]  # Use the latest bar from data handler
+            bar_df = self.bars.get_latest_bars(order.symbol, N=1)
+            bar_datetime = bar_df.index[0]
+            bar_data = bar_df.iloc[0]  # Use the latest bar from data handler
 
             # Update highest/lowest price seen for trailing stops if applicable
             if order.order_type == "TRAIL":
@@ -120,7 +120,7 @@ class SimulatedExecutionHandler(ExecutionHandler):
                 del self.orders[order_id]
                 return
 
-            fill_event = self._check_order(order_id, order, remaining_quantity)
+            fill_event = self._check_order(order_id, order, remaining_quantity, (bar_datetime, bar_data))
             if fill_event:
                 self.events.put(fill_event)
                 order.filled_quantity += fill_event.quantity
@@ -134,7 +134,10 @@ class SimulatedExecutionHandler(ExecutionHandler):
         if event.type == "MARKET":
             for order_id, order in list(self.orders.items()):
                 # Update highest/lowest price seen for trailing stops
-                bar = self.bars.get_latest_bars(order.symbol)[0]
+                bar_df = self.bars.get_latest_bars(order.symbol, N=1)
+                if bar_df.empty:
+                    continue
+                bar = (bar_df.index[0], bar_df.iloc[0])
                 if order.order_type == "TRAIL":
                     order.highest_price_seen = max(
                         order.highest_price_seen, bar[1]["high"]
@@ -149,18 +152,18 @@ class SimulatedExecutionHandler(ExecutionHandler):
                     del self.orders[order_id]
                     continue
 
-                fill_event = self._check_order(order_id, order, remaining_quantity)
+                fill_event = self._check_order(order_id, order, remaining_quantity, bar)
                 if fill_event:
                     self.events.put(fill_event)
                     order.filled_quantity += fill_event.quantity
                     if order.filled_quantity >= order.quantity:
                         del self.orders[order_id]
 
-    def _check_order(self, order_id, order, remaining_quantity):
+    def _check_order(self, order_id, order, remaining_quantity, bar):
         """
         Checks if an order has been filled.
         """
-        bar = self.bars.get_latest_bars(order.symbol)[0]
+        
         if order.order_type == "MKT":
             return self._fill_market_order(order_id, order, bar, remaining_quantity)
         elif order.order_type == "LMT":

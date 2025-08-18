@@ -9,14 +9,20 @@ class DataHandler:
     DataHandler is an abstract base class providing an interface for
     all subsequent (inherited) data handlers (both live and historic).
     """
+    def get_bars(self, symbol, N=None, start_date=None, end_date=None):
+        raise NotImplementedError("Should implement get_bars()")
+
     def get_latest_bars(self, symbol, N=1):
-        raise NotImplementedError("Should implement get_latest_bars()")
+        """
+        Returns the last N bars from the data up to the current time.
+        This is a convenience wrapper around get_bars.
+        """
+        return self.get_bars(symbol, N=N)
 
     def update_bars(self):
         raise NotImplementedError("Should implement update_bars()")
 
-    def get_historical_bars(self, symbol, N=None):
-        raise NotImplementedError("Should implement get_historical_bars()")
+    
 
 class CSVDataHandler(DataHandler):
     """
@@ -80,22 +86,13 @@ class CSVDataHandler(DataHandler):
         """
         return self.bar_generators[symbol]
 
-    def get_latest_bars(self, symbol, N=1):
+    def get_bars(self, symbol, N=None, start_date=None, end_date=None):
         """
-        Returns the last N bars from the latest_symbol_data dictionary.
-        """
-        try:
-            bars_list = self.latest_symbol_data[symbol]
-        except KeyError:
-            logger.warning(f"No historical data for symbol {symbol} yet.")
-            return [] # Return empty list if symbol not found
-        else:
-            return bars_list[-N:]
+        Returns historical bars for a given symbol.
 
-    def get_historical_bars(self, symbol, N=None):
-        """
-        Returns the last N historical bars for a given symbol up to the current backtest time.
-        If N is None, returns all historical bars up to the current time.
+        - If N is provided, returns the last N bars up to the current backtest time.
+        - If start_date and/or end_date are provided, returns bars within that date range.
+        - If no parameters are provided, returns all historical bars up to the current time.
         """
         if symbol not in self.symbol_data:
             logger.error(f"Symbol {symbol} not found in historical data set.")
@@ -103,15 +100,29 @@ class CSVDataHandler(DataHandler):
 
         if self.current_time is None:
             logger.warning("Backtest has not started, no historical data to return.")
-            return pd.DataFrame() # No data to return if backtest hasn't started
+            return pd.DataFrame()
 
-        # Filter the full dataframe up to the current backtest time
-        past_data = self.symbol_data[symbol].loc[:self.current_time]
+        # Filter data up to the current backtest time
+        data = self.symbol_data[symbol].loc[:self.current_time]
 
-        if N is None:
-            return past_data
-        else:
-            return past_data.tail(N)
+        # Filter by date range
+        if start_date:
+            data = data.loc[start_date:]
+        if end_date:
+            data = data.loc[:end_date]
+
+        # Return last N bars if specified
+        if N is not None:
+            return data.tail(N)
+        
+        return data
+
+    def get_latest_bars(self, symbol, N=1):
+        """
+        Returns the last N bars from the data up to the current time.
+        This is a convenience wrapper around get_bars.
+        """
+        return self.get_bars(symbol, N=N)
 
     def update_bars(self):
         """

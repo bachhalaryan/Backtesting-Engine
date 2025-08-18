@@ -13,8 +13,11 @@ from portfolio import Portfolio
 from execution_handler import SimulatedExecutionHandler
 
 class MockBars:
-    def get_latest_bars(self, symbol):
-        return [(pd.Timestamp('2023-01-01'), {'open': 100, 'high': 101, 'low': 99, 'close': 100.5, 'volume': 100000})]
+    def get_latest_bars(self, symbol, N=1):
+        data = [(pd.Timestamp('2023-01-01'), {'open': 100, 'high': 101, 'low': 99, 'close': 100.5, 'volume': 100000})]
+        df = pd.DataFrame([x[1] for x in data], index=[x[0] for x in data])
+        df.index.name = 'datetime'
+        return df.tail(N)
 
 # Test for EventBus
 def test_event_bus_put_get():
@@ -118,12 +121,12 @@ def test_csv_data_handler_get_latest_bars(setup_csv_data):
 
     latest_bar = handler.get_latest_bars("AAPL")
     assert len(latest_bar) == 1
-    assert latest_bar[0][0] == pd.Timestamp('2023-01-03')
+    assert latest_bar.index[0] == pd.Timestamp('2023-01-03')
 
     latest_two_bars = handler.get_latest_bars("AAPL", N=2)
     assert len(latest_two_bars) == 2
-    assert latest_two_bars[0][0] == pd.Timestamp('2023-01-02')
-    assert latest_two_bars[1][0] == pd.Timestamp('2023-01-03')
+    assert latest_two_bars.index[0] == pd.Timestamp('2023-01-02')
+    assert latest_two_bars.index[1] == pd.Timestamp('2023-01-03')
 
 def test_csv_data_handler_multiple_symbols(setup_csv_data):
     csv_dir = setup_csv_data
@@ -216,14 +219,14 @@ def test_portfolio_position_sizing(setup_csv_data):
     signal_event_percent = SignalEvent(1, "AAPL", pd.Timestamp('2023-01-01'), 'LONG', 1.0, sizing_type='PERCENT_EQUITY', sizing_value=0.10)
     portfolio.update_signal(signal_event_percent)
     order_event_percent = event_bus.get()
-    assert order_event_percent.quantity == int((100000.0 * 0.10) / data_handler.get_latest_bars("AAPL")[0][1]['close'])
+    assert order_event_percent.quantity == int((100000.0 * 0.10) / data_handler.get_latest_bars("AAPL").iloc[-1]['close'])
 
     # Test FIXED_CAPITAL sizing
     # 5000 capital / 100.50 = 49.75 -> 49 shares
     signal_event_capital = SignalEvent(1, "AAPL", pd.Timestamp('2023-01-01'), 'LONG', 1.0, sizing_type='FIXED_CAPITAL', sizing_value=5000)
     portfolio.update_signal(signal_event_capital)
     order_event_capital = event_bus.get()
-    assert order_event_capital.quantity == int(5000 / data_handler.get_latest_bars("AAPL")[0][1]['close'])
+    assert order_event_capital.quantity == int(5000 / data_handler.get_latest_bars("AAPL").iloc[-1]['close'])
 
 # Test for SimulatedExecutionHandler
 def test_simulated_execution_handler():

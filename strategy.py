@@ -43,7 +43,7 @@ class BuyAndHoldStrategy(Strategy):
             self.bar_count += 1
 
             # Demonstrate accessing historical data
-            historical_bars = self.data_handler.get_historical_bars(self.symbol, N=3)
+            historical_bars = self.data_handler.get_bars(self.symbol, N=3)
             if not historical_bars.empty:
                 logger.debug(
                     f"Latest 3 historical bars for {self.symbol}:\n{historical_bars}"
@@ -56,7 +56,7 @@ class BuyAndHoldStrategy(Strategy):
             )
             logger.debug(f"Open orders: {len(self.execution_handler.orders)}")
 
-            current_price = self.data_handler.get_latest_bars(self.symbol)[0][1][
+            current_price = self.data_handler.get_latest_bars(self.symbol).iloc[-1][
                 "close"
             ]
 
@@ -185,7 +185,7 @@ class StressTestStrategy(Strategy):
             return
 
         self.bar_count += 1
-        current_price = self.data_handler.get_latest_bars(self.symbol)[0][1]["close"]
+        current_price = self.data_handler.get_latest_bars(self.symbol).iloc[-1]["close"]
 
         # --- STRESS TEST SEQUENCE ---
 
