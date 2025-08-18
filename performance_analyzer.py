@@ -165,18 +165,41 @@ class PerformanceAnalyzer:
 
         return metrics
 
+    def _create_plotting_index(self, datetime_index):
+        """
+        Creates a continuous numerical index for plotting, mapping original datetimes.
+        Returns the numerical index and a dictionary for tick mapping.
+        """
+        unique_dates = datetime_index.unique().sort_values()
+        # Create a mapping from original datetime to a continuous numerical scale
+        date_to_num = {date: i for i, date in enumerate(unique_dates)}
+        num_to_date = {i: date for i, date in enumerate(unique_dates)}
+
+        # Generate tick values and labels for the plot
+        # Choose a reasonable number of ticks, e.g., 10-15
+        num_ticks = min(len(unique_dates), 15)
+        tick_indices = np.linspace(0, len(unique_dates) - 1, num_ticks, dtype=int)
+        tick_vals = [date_to_num[unique_dates[i]] for i in tick_indices]
+        tick_text = [unique_dates[i].strftime('%Y-%m-%d') for i in tick_indices]
+
+        return np.array([date_to_num[d] for d in datetime_index]), tick_vals, tick_text
+
     def generate_equity_curve_matplotlib(self, filepath):
         """
         Generates and saves a static Matplotlib equity curve plot.
         """
         if not self.equity_curve.empty:
+            plot_index, tick_vals, tick_text = self._create_plotting_index(self.equity_curve.index)
+
             plt.figure(figsize=(12, 6))
-            plt.plot(self.equity_curve.index, self.equity_curve["equity_curve"], label="Equity Curve")
+            plt.plot(plot_index, self.equity_curve["equity_curve"], label="Equity Curve")
             plt.title("Equity Curve")
             plt.xlabel("Date")
             plt.ylabel("Portfolio Value")
+            plt.xticks(tick_vals, tick_text, rotation=45, ha='right')
             plt.grid(True)
             plt.legend()
+            plt.tight_layout()
             plt.savefig(filepath)
             plt.close()
 
@@ -187,13 +210,16 @@ class PerformanceAnalyzer:
         if not self.equity_curve.empty:
             peak = self.equity_curve["equity_curve"].expanding(min_periods=1).max()
             drawdown = (self.equity_curve["equity_curve"] - peak) / peak * 100
+            plot_index, tick_vals, tick_text = self._create_plotting_index(drawdown.index)
 
             plt.figure(figsize=(12, 6))
-            plt.fill_between(drawdown.index, drawdown, 0, color='red', alpha=0.5)
+            plt.fill_between(plot_index, drawdown, 0, color='red', alpha=0.5)
             plt.title("Drawdown")
             plt.xlabel("Date")
             plt.ylabel("Drawdown (%)")
+            plt.xticks(tick_vals, tick_text, rotation=45, ha='right')
             plt.grid(True)
+            plt.tight_layout()
             plt.savefig(filepath)
             plt.close()
 
@@ -202,8 +228,20 @@ class PerformanceAnalyzer:
         Generates and saves an interactive Plotly equity curve plot.
         """
         if not self.equity_curve.empty:
-            fig = go.Figure(data=[go.Scatter(x=self.equity_curve.index, y=self.equity_curve["equity_curve"], mode='lines', name='Equity Curve')])
-            fig.update_layout(title='Interactive Equity Curve', xaxis_title='Date', yaxis_title='Portfolio Value')
+            plot_index, tick_vals, tick_text = self._create_plotting_index(self.equity_curve.index)
+
+            fig = go.Figure(data=[go.Scatter(x=plot_index, y=self.equity_curve["equity_curve"], mode='lines', name='Equity Curve')])
+            fig.update_layout(
+                title='Interactive Equity Curve',
+                xaxis=dict(
+                    title='Date',
+                    type='linear', # Use linear type for numerical x-axis
+                    tickmode='array',
+                    tickvals=tick_vals,
+                    ticktext=tick_text
+                ),
+                yaxis_title='Portfolio Value'
+            )
             fig.write_html(filepath)
 
     def generate_drawdown_plotly(self, filepath):
@@ -213,9 +251,20 @@ class PerformanceAnalyzer:
         if not self.equity_curve.empty:
             peak = self.equity_curve["equity_curve"].expanding(min_periods=1).max()
             drawdown = (self.equity_curve["equity_curve"] - peak) / peak * 100
+            plot_index, tick_vals, tick_text = self._create_plotting_index(drawdown.index)
 
-            fig = go.Figure(data=[go.Scatter(x=drawdown.index, y=drawdown, fill='tozeroy', mode='lines', name='Drawdown', fillcolor='rgba(255,0,0,0.5)')])
-            fig.update_layout(title='Interactive Drawdown', xaxis_title='Date', yaxis_title='Drawdown (%)')
+            fig = go.Figure(data=[go.Scatter(x=plot_index, y=drawdown, fill='tozeroy', mode='lines', name='Drawdown', fillcolor='rgba(255,0,0,0.5)')])
+            fig.update_layout(
+                title='Interactive Drawdown',
+                xaxis=dict(
+                    title='Date',
+                    type='linear',
+                    tickmode='array',
+                    tickvals=tick_vals,
+                    ticktext=tick_text
+                ),
+                yaxis_title='Drawdown (%)'
+            )
             fig.write_html(filepath)
 
     def generate_trades_plotly(self, filepath):
@@ -266,8 +315,13 @@ class PerformanceAnalyzer:
                 continue
 
             # Plot candlestick chart
+            plot_index, tick_vals, tick_text = self._create_plotting_index(historical_df.index)
+            
+            # Map original datetimes to numerical plot index
+            date_to_num_map = {date: i for i, date in enumerate(historical_df.index.unique().sort_values())}
+
             fig.add_trace(go.Candlestick(
-                x=historical_df.index,
+                x=plot_index,
                 open=historical_df['open'],
                 high=historical_df['high'],
                 low=historical_df['low'],
@@ -278,30 +332,41 @@ class PerformanceAnalyzer:
             # Add trade markers
             for trade in self.closed_trades:
                 if trade['symbol'] == symbol:
-                    # Entry marker
-                    fig.add_trace(go.Scatter(
-                        x=[trade['entry_time']],
-                        y=[trade['entry_price']],
-                        mode='markers',
-                        marker=dict(symbol='triangle-up' if trade['direction'] == 'LONG' else 'triangle-down', size=10, color='green'),
-                        name=f'{symbol} Entry', showlegend=False,
-                        hoverinfo='text',
-                        hovertext=f'Entry: {trade['entry_time']}<br>Price: {trade['entry_price']:.2f}<br>Qty: {trade['quantity']}<br>Dir: {trade['direction']}'
-                    ))
-                    # Exit marker
-                    fig.add_trace(go.Scatter(
-                        x=[trade['exit_time']],
-                        y=[trade['exit_price']],
-                        mode='markers',
-                        marker=dict(symbol='circle' if trade['pnl'] > 0 else 'x', size=10, color='blue' if trade['pnl'] > 0 else 'red'),
-                        name=f'{symbol} Exit', showlegend=False,
-                        hoverinfo='text',
-                        hovertext=f'Exit: {trade['exit_time']}<br>Price: {trade['exit_price']:.2f}<br>PnL: {trade['pnl']:.2f}<br>Duration: {trade['duration']:.2f} days'
-                    ))
+                    entry_num = date_to_num_map.get(trade['entry_time'])
+                    exit_num = date_to_num_map.get(trade['exit_time'])
+
+                    if entry_num is not None:
+                        # Entry marker
+                        fig.add_trace(go.Scatter(
+                            x=[entry_num],
+                            y=[trade['entry_price']],
+                            mode='markers',
+                            marker=dict(symbol='triangle-up' if trade['direction'] == 'LONG' else 'triangle-down', size=10, color='green'),
+                            name=f'{symbol} Entry', showlegend=False,
+                            hoverinfo='text',
+                            hovertext=f'Entry: {trade['entry_time']}<br>Price: {trade['entry_price']:.2f}<br>Qty: {trade['quantity']}<br>Dir: {trade['direction']}'
+                        ))
+                    if exit_num is not None:
+                        # Exit marker
+                        fig.add_trace(go.Scatter(
+                            x=[exit_num],
+                            y=[trade['exit_price']],
+                            mode='markers',
+                            marker=dict(symbol='circle' if trade['pnl'] > 0 else 'x', size=10, color='blue' if trade['pnl'] > 0 else 'red'),
+                            name=f'{symbol} Exit', showlegend=False,
+                            hoverinfo='text',
+                            hovertext=f'Exit: {trade['exit_time']}<br>Price: {trade['exit_price']:.2f}<br>PnL: {trade['pnl']:.2f}<br>Duration: {trade['duration']:.2f} days'
+                        ))
 
         fig.update_layout(
             title='Interactive Trades Overlay',
-            xaxis_title='Date',
+            xaxis=dict(
+                title='Date',
+                type='linear',
+                tickmode='array',
+                tickvals=tick_vals,
+                ticktext=tick_text
+            ),
             yaxis_title='Price',
             xaxis_rangeslider_visible=False
         )
