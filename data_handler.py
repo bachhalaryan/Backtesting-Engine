@@ -30,10 +30,13 @@ class CSVDataHandler(DataHandler):
     and provide an interface to obtain the latest bar of
     each symbol as well as updating the bars.
     """
-    def __init__(self, events, csv_dir, symbol_list):
+    def __init__(self, events, csv_dir, symbol_list, start_date=None, end_date=None, bars_from_end=None):
         self.events = events
         self.csv_dir = csv_dir
         self.symbol_list = symbol_list
+        self.start_date = start_date
+        self.end_date = end_date
+        self.bars_from_end = bars_from_end
 
         self.symbol_data = {} # Stores the full DataFrame for each symbol
         self.latest_symbol_data = {}
@@ -56,9 +59,19 @@ class CSVDataHandler(DataHandler):
             # indexed on datetime
             file_path = f"{self.csv_dir}/{s}.csv"
             try:
-                self.symbol_data[s] = pd.read_csv(
-                    file_path, header=0, index_col=0, parse_dates=True, nrows=1000
+                df = pd.read_csv(
+                    file_path, header=0, index_col=0, parse_dates=True
                 )
+                
+                # Filter by date range or number of bars
+                if self.start_date:
+                    df = df.loc[self.start_date:]
+                if self.end_date:
+                    df = df.loc[:self.end_date]
+                if self.bars_from_end:
+                    df = df.tail(self.bars_from_end)
+
+                self.symbol_data[s] = df
                 self.symbol_data[s].columns = [col.lower() for col in self.symbol_data[s].columns]
                 logger.debug(f"Successfully loaded {file_path} for symbol {s}")
             except FileNotFoundError:
