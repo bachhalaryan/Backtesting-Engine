@@ -1,19 +1,23 @@
 import pandas as pd
 from typing import List, Optional, Union
+import os
 
 class DataManager:
     """
     Manages loading, processing, and accessing financial data for analysis.
     """
 
-    def __init__(self, data_path: str = './data'):
+    def __init__(self, data_path: str = './data', cache_path: str = './cache'):
         """
         Initializes the DataManager.
 
         Args:
             data_path (str): The base directory where data is stored.
+            cache_path (str): The directory to store cached data.
         """
         self.data_path = data_path
+        self.cache_path = cache_path
+        os.makedirs(self.cache_path, exist_ok=True)
         # In the future, we can add connections to databases or APIs here.
 
     def get_data(
@@ -24,10 +28,11 @@ class DataManager:
         timeframe: str = '1d',
     ) -> Optional[pd.DataFrame]:
         """
-        Loads data for a given symbol and timeframe.
+        Loads data for a given symbol and timeframe, using a cache to speed up
+        subsequent loads.
 
-        For now, assumes data is in CSV files in the format:
-        {data_path}/{symbol}_{timeframe}.csv
+        The method first checks for a cached Parquet file. If not found, it
+        loads from the source CSV and creates a cache for future use.
 
         Args:
             symbol (str): The ticker symbol to load (e.g., 'AAPL').
@@ -38,17 +43,29 @@ class DataManager:
         Returns:
             Optional[pd.DataFrame]: A DataFrame with the loaded data, or None if not found.
         """
-        file_path = f"{self.data_path}/{symbol.upper()}_{timeframe}.csv"
-        try:
-            df = pd.read_csv(file_path, index_col='Date', parse_dates=True)
-            
-            # Filter by date range
+        cache_file = f"{self.cache_path}/{symbol.upper()}_{timeframe}.parquet"
+        
+        df = None
+        # 1. Try loading from cache
+        if os.path.exists(cache_file):
+            df = pd.read_parquet(cache_file)
+        
+        # 2. If cache miss, load from source
+        else:
+            source_file = f"{self.data_path}/{symbol.upper()}_{timeframe}.csv"
+            try:
+                df = pd.read_csv(source_file, index_col='Date', parse_dates=True)
+                # Save to cache for next time
+                df.to_parquet(cache_file)
+            except FileNotFoundError:
+                print(f"Data file not found: {source_file}")
+                return None
+
+        # 3. Filter by date range
+        if df is not None:
             if start_date:
                 df = df[df.index >= pd.to_datetime(start_date)]
             if end_date:
                 df = df[df.index <= pd.to_datetime(end_date)]
 
-            return df
-        except FileNotFoundError:
-            print(f"Data file not found: {file_path}")
-            return None
+        return df
