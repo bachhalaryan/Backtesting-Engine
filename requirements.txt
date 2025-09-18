@@ -1,1 +1,6 @@
 ta
+pandas
+scipy
+scikit-learn
+matplotlib
+jupyter
