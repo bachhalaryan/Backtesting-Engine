@@ -62,3 +62,17 @@ def calculate_bollinger_bands(df: pd.DataFrame, window: int, window_dev: float, 
         'bb_bbh': bollinger.bollinger_hband(),
         'bb_bbl': bollinger.bollinger_lband()
     })
+
+def calculate_mid_price(df: pd.DataFrame) -> pd.Series:
+    """
+    Calculates the mid-price ( (high + low) / 2 ) for a given DataFrame.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame with 'high' and 'low' columns.
+
+    Returns:
+        pd.Series: A Series containing the mid-price values.
+    """
+    if 'high' not in df.columns or 'low' not in df.columns:
+        raise ValueError("DataFrame must contain 'high' and 'low' columns to calculate mid-price.")
+    return (df['high'] + df['low']) / 2

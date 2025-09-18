@@ -1,6 +1,6 @@
 import unittest
 import pandas as pd
-from analysis.timeseries import calculate_sma, calculate_ema, calculate_rsi, calculate_bollinger_bands
+from analysis.timeseries import calculate_sma, calculate_ema, calculate_rsi, calculate_bollinger_bands, calculate_mid_price
 
 class TestTimeSeriesAnalysis(unittest.TestCase):
 
@@ -53,6 +53,25 @@ class TestTimeSeriesAnalysis(unittest.TestCase):
         self.assertIn('bb_bbl', bb.columns)
         self.assertTrue(bb.iloc[0:19].isnull().all().all()) # First 19 values should be NaN
         self.assertAlmostEqual(bb['bb_bbm'].iloc[-1], 19.5, places=3) # (10+..+29)/20
+
+    def test_calculate_mid_price(self):
+        df_with_ohlc = pd.DataFrame({
+            'high': [10, 12, 14, 16, 18],
+            'low': [8, 10, 12, 14, 16]
+        })
+        mid_price = calculate_mid_price(df_with_ohlc)
+        self.assertIsInstance(mid_price, pd.Series)
+        self.assertEqual(len(mid_price), 5)
+        self.assertTrue((mid_price == pd.Series([9.0, 11.0, 13.0, 15.0, 17.0])).all())
+
+        # Test with missing columns
+        df_missing_high = pd.DataFrame({'low': [1, 2, 3]})
+        with self.assertRaises(ValueError):
+            calculate_mid_price(df_missing_high)
+
+        df_missing_low = pd.DataFrame({'high': [1, 2, 3]})
+        with self.assertRaises(ValueError):
+            calculate_mid_price(df_missing_low)
 
 if __name__ == '__main__':
     unittest.main()
