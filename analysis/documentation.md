@@ -4,29 +4,28 @@ This document provides an overview and usage instructions for the `analysis` mod
 
 ## 1. DataManager
 
-The `DataManager` class is responsible for loading, caching, and fetching financial time series data from various sources.
+The `DataManager` class is responsible for loading, caching, and resampling financial time series data.
 
 ### `DataManager(data_path='./data', cache_path='./cache')`
 
 Initializes the DataManager.
 
--   `data_path` (str): The directory where local CSV data files are stored. The DataManager will look for files in the format `{symbol}_{timeframe}.csv`.
--   `cache_path` (str): The directory where processed data will be cached in Parquet format for faster subsequent access. Cache files are named `{symbol}_{timeframe}.parquet`.
+-   `data_path` (str): The directory where local 1-minute CSV data files are stored. The DataManager will look for files in the format `{symbol}.csv`.
+-   `cache_path` (str): The directory where processed and resampled data will be cached in Parquet format for faster subsequent access. Cache files are named `{symbol}_{timeframe}.parquet`.
 
 ### `get_data(symbol: str, start_date: Optional[str] = None, end_date: Optional[str] = None, timeframe: str = '1d') -> Optional[pd.DataFrame]`
 
-Loads historical data for a given symbol and timeframe. The method prioritizes data sources in the following order:
+Loads and resamples historical data for a given symbol and timeframe. The method prioritizes data sources in the following order:
 
-1.  **Cache:** Checks `cache_path` for a Parquet file.
-2.  **Local CSV:** Checks `data_path` for a CSV file.
-3.  **API (yfinance):** If not found locally, attempts to fetch data from Yahoo Finance. API-fetched data is then saved to both the local CSV and the cache for future use.
+1.  **Cache:** Checks `cache_path` for a Parquet file with the corresponding symbol and timeframe.
+2.  **Local 1-Min CSV:** If not found in cache, it checks `data_path` for a 1-minute CSV file (e.g., `EURUSD.csv`). It then resamples this data to the requested timeframe and saves it to the cache for future use.
 
 **Parameters:**
 
 -   `symbol` (str): The ticker symbol (e.g., 'AAPL', 'EURUSD').
 -   `start_date` (Optional[str]): The start date for the data in 'YYYY-MM-DD' format. If `None`, fetches all available data.
 -   `end_date` (Optional[str]): The end date for the data in 'YYYY-MM-DD' format. If `None`, fetches data up to the most recent available.
--   `timeframe` (str): The data aggregation period (e.g., '1d' for daily). Currently, API fetching primarily supports '1d'.
+-   `timeframe` (str): The data aggregation period (e.g., '5min', '1H', '1D'). Uses pandas frequency strings.
 
 **Returns:**
 
@@ -39,14 +38,15 @@ from analysis.data_manager import DataManager
 
 dm = DataManager(data_path='./my_data', cache_path='./my_cache')
 
-# Get daily data for AAPL, fetching from API if not available locally/cached
-aapl_df = dm.get_data(symbol='AAPL', start_date='2020-01-01', end_date='2023-12-31', timeframe='1d')
+# Get 1-hour data for AAPL, assuming 'my_data/AAPL.csv' contains 1-minute data
+aapl_df = dm.get_data(symbol='AAPL', start_date='2023-01-01', timeframe='1H')
 
 if aapl_df is not None:
     print(aapl_df.head())
 
-# Get data for a symbol that might only be in your local CSV
-eurusd_df = dm.get_data(symbol='EURUSD', start_date='2022-01-01')
+# Get 5-minute data for EURUSD
+# This will be resampled from 'my_data/EURUSD.csv' and cached.
+eurusd_df = dm.get_data(symbol='EURUSD', start_date='2023-01-01', timeframe='5min')
 ```
 
 ## 2. Time Series Analysis (`timeseries.py`)

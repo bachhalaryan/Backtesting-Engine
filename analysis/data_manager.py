@@ -1,11 +1,11 @@
 import pandas as pd
 from typing import List, Optional, Union
 import os
-import yfinance as yf
 
 class DataManager:
     """
     Manages loading, processing, and accessing financial data for analysis.
+    This manager reads 1-minute data and can resample it to any specified timeframe.
     """
 
     def __init__(self, data_path: str = './data', cache_path: str = './cache'):
@@ -13,42 +13,35 @@ class DataManager:
         Initializes the DataManager.
 
         Args:
-            data_path (str): The base directory where data is stored.
-            cache_path (str): The directory to store cached data.
+            data_path (str): The base directory where 1-minute CSV data is stored.
+            cache_path (str): The directory to store cached (and resampled) data.
         """
         self.data_path = data_path
         self.cache_path = cache_path
         os.makedirs(self.cache_path, exist_ok=True)
-        os.makedirs(self.data_path, exist_ok=True) # Ensure data directory exists
+        os.makedirs(self.data_path, exist_ok=True)
 
-    def _fetch_data_from_api(
-        self,
-        symbol: str,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        timeframe: str = '1d',
-    ) -> Optional[pd.DataFrame]:
+    def _resample_data(self, df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         """
-        Fetches historical data for a given symbol from Yahoo Finance.
+        Resamples 1-minute data to a larger timeframe.
         """
-        if timeframe != '1d':
-            print(f"Warning: yfinance only supports daily data for now. Timeframe {timeframe} will be ignored.")
+        if df.index.tz is None:
+            df.index = df.index.tz_localize('UTC')
+        else:
+            df.index = df.index.tz_convert('UTC')
 
-        ticker = yf.Ticker(symbol)
-        try:
-            df = ticker.history(start=start_date, end=end_date)
-            if not df.empty:
-                df.index.name = 'Date'
-                # Save to CSV for future direct loading
-                source_file = f"{self.data_path}/{symbol.upper()}_{timeframe}.csv"
-                df.to_csv(source_file)
-                return df
-            else:
-                print(f"No data fetched from API for {symbol} between {start_date} and {end_date}")
-                return None
-        except Exception as e:
-            print(f"Error fetching data from yfinance for {symbol}: {e}")
-            return None
+        ohlc = {
+            'Open': 'first',
+            'High': 'max',
+            'Low': 'min',
+            'Close': 'last',
+            'Volume': 'sum'
+        }
+        
+        # Use 'base' parameter to align the resampling to the start of the interval
+        resampled_df = df.resample(timeframe, label='left', closed='left').agg(ohlc).dropna()
+        
+        return resampled_df
 
     def get_data(
         self,
@@ -58,49 +51,52 @@ class DataManager:
         timeframe: str = '1d',
     ) -> Optional[pd.DataFrame]:
         """
-        Loads data for a given symbol and timeframe, using a cache to speed up
-        subsequent loads. If not found in cache or local CSV, fetches from API.
+        Loads data for a given symbol and timeframe. It first checks the cache
+        for resampled data. If not found, it loads the base 1-minute data,
+        resamples it, caches it, and then returns the requested data.
 
         Args:
-            symbol (str): The ticker symbol to load (e.g., 'AAPL').
+            symbol (str): The ticker symbol to load (e.g., 'EURUSD').
             start_date (Optional[str]): The start date in 'YYYY-MM-DD' format.
             end_date (Optional[str]): The end date in 'YYYY-MM-DD' format.
-            timeframe (str): The data timeframe (e.g., '1d', '1h', '1m').
+            timeframe (str): The target data timeframe (e.g., '5m', '1h', '1d').
 
         Returns:
-            Optional[pd.DataFrame]: A DataFrame with the loaded data, or None if not found.
+            Optional[pd.DataFrame]: A DataFrame with the loaded and resampled data, or None if not found.
         """
         cache_file = f"{self.cache_path}/{symbol.upper()}_{timeframe}.parquet"
-        source_file = f"{self.data_path}/{symbol.upper()}_{timeframe}.csv"
         
-        df = None
         # 1. Try loading from cache
         if os.path.exists(cache_file):
             df = pd.read_parquet(cache_file)
-        
-        # 2. If cache miss, try loading from source CSV
-        if df is None and os.path.exists(source_file):
+        else:
+            # 2. If cache miss, load 1-minute source data
+            source_file = f"{self.data_path}/{symbol.upper()}.csv"
+            if not os.path.exists(source_file):
+                print(f"Source file not found: {source_file}")
+                return None
+            
             try:
-                df = pd.read_csv(source_file, index_col='Date', parse_dates=True)
-                # Save to cache for next time
+                df_1m = pd.read_csv(source_file, index_col='Date', parse_dates=True)
+                
+                # 3. Resample the data
+                if timeframe == '1m':
+                    df = df_1m
+                else:
+                    df = self._resample_data(df_1m, timeframe)
+                
+                # 4. Save the resampled data to cache
                 df.to_parquet(cache_file)
+
             except Exception as e:
-                print(f"Error reading source CSV {source_file}: {e}")
-                df = None # Reset df if there was an error
+                print(f"Error processing source file {source_file}: {e}")
+                return None
 
-        # 3. If still no data, fetch from API
-        if df is None:
-            print(f"Attempting to fetch data for {symbol} from API...")
-            df = self._fetch_data_from_api(symbol, start_date, end_date, timeframe)
-            if df is not None:
-                # API fetch already saves to CSV, now save to cache
-                df.to_parquet(cache_file)
-
-        # 4. Filter by date range
-        if df is not None:
+        # 5. Filter by date range
+        if df is not None and not df.empty:
             if start_date:
-                df = df[df.index >= pd.to_datetime(start_date)]
+                df = df[df.index >= pd.to_datetime(start_date).tz_localize('UTC')]
             if end_date:
-                df = df[df.index <= pd.to_datetime(end_date)]
-
+                df = df[df.index <= pd.to_datetime(end_date).tz_localize('UTC')]
+        
         return df
