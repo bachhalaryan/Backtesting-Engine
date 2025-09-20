@@ -1,3 +1,4 @@
+.ipynb_checkpoints/
 __pycache__/
 *.pyc
 .pytest_cache/
@@ -8,3 +9,6 @@ temporary.md
 testing.py
 main_try.py
 strategies/midbar.py
+analysis/data
+analysis/cache
+tests/data

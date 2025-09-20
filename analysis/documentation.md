@@ -10,7 +10,7 @@ The `DataManager` class is responsible for loading, caching, and resampling fina
 
 Initializes the DataManager.
 
--   `data_path` (str): The directory where local 1-minute CSV data files are stored. The DataManager will look for files in the format `{symbol}.csv`.
+-   `data_path` (str): The directory where local 1-minute CSV data files are stored. The DataManager will look for files in the format `{symbol}.csv`. It automatically infers the datetime column (the first column) and its format.
 -   `cache_path` (str): The directory where processed and resampled data will be cached in Parquet format for faster subsequent access. Cache files are named `{symbol}_{timeframe}.parquet`.
 
 ### `get_data(symbol: str, start_date: Optional[str] = None, end_date: Optional[str] = None, timeframe: str = '1d') -> Optional[pd.DataFrame]`
@@ -29,7 +29,7 @@ Loads and resamples historical data for a given symbol and timeframe. The method
 
 **Returns:**
 
--   `pd.DataFrame`: A DataFrame containing the historical data, indexed by 'Date', with columns like 'Open', 'High', 'Low', 'Close', 'Volume'. Returns `None` if data cannot be retrieved.
+-   `pd.DataFrame`: A DataFrame containing the historical data, indexed by 'Date', with uppercase columns: 'Open', 'High', 'Low', 'Close', 'Volume'. Returns `None` if data cannot be retrieved.
 
 **Usage Example:**
 
@@ -51,13 +51,13 @@ eurusd_df = dm.get_data(symbol='EURUSD', start_date='2023-01-01', timeframe='5mi
 
 ## 2. Time Series Analysis (`timeseries.py`)
 
-This module provides functions to calculate common technical indicators.
+This module provides functions to calculate common technical indicators. All functions in this module expect input DataFrames with **uppercase** column names (`Open`, `High`, `Low`, `Close`).
 
 ### `calculate_sma(df: pd.DataFrame, window: int, column: str = 'Close') -> pd.Series`
 
 Calculates the Simple Moving Average (SMA).
 
--   `df` (pd.DataFrame): Input DataFrame with a 'Close' column (or specified `column`).
+-   `df` (pd.DataFrame): Input DataFrame with an uppercase 'Close' column (or specified `column`).
 -   `window` (int): The lookback period for the SMA.
 -   `column` (str): The column to calculate SMA on. Defaults to 'Close'.
 
@@ -96,9 +96,9 @@ Calculates Bollinger Bands (BB).
 
 ### `calculate_mid_price(df: pd.DataFrame) -> pd.Series`
 
-Calculates the mid-price ( (high + low) / 2 ) for a given DataFrame.
+Calculates the mid-price ( (High + Low) / 2 ) for a given DataFrame.
 
--   `df` (pd.DataFrame): The input DataFrame with 'high' and 'low' columns.
+-   `df` (pd.DataFrame): The input DataFrame with 'High' and 'Low' columns.
 
 **Returns:** `pd.Series` containing the mid-price values.
 
@@ -119,7 +119,7 @@ print(aapl_df.tail())
 
 ## 3. Machine Learning (`ml.py`)
 
-This module provides functions for feature engineering, target variable creation, model training, and prediction, supporting both classification and regression tasks.
+This module provides functions for feature engineering, target variable creation, model training, and prediction, supporting both classification and regression tasks. All functions in this module expect input DataFrames with **uppercase** column names (`Open`, `High`, `Low`, `Close`).
 
 ### `create_lagged_features(df: pd.DataFrame, lags: List[int], target_column: str = 'Close') -> pd.DataFrame`
 
@@ -229,23 +229,22 @@ if df is None or df.empty:
     # exit()
 
 # --- 2. Feature Engineering ---
-# Calculate mid-price (now expects lowercase 'high' and 'low')
+# Calculate mid-price
 df['mid_price'] = calculate_mid_price(df)
 
-# Define features to use (high, low, mid_price)
-feature_columns = ['high', 'low', 'mid_price'] # Use lowercase
+# Define features to use
+feature_columns = ['High', 'Low', 'mid_price'] # Use uppercase
 lags = [1] # One day past bar
 
-# Create lagged features for high, low, and mid_price
-# We need to create lagged features for each column separately and then combine
+# Create lagged features for High, Low, and mid_price
 all_features_df = pd.DataFrame(index=df.index)
 for col in feature_columns:
-    lagged_col_df = create_lagged_features(df, lags, target_column=col) # target_column is now lowercase
+    lagged_col_df = create_lagged_features(df, lags, target_column=col)
     all_features_df = all_features_df.join(lagged_col_df, how='outer')
 
 # --- 3. Target Variable Creation ---
 # Target: Next day's mid-price
-target_series = create_target_regression(df, column='mid_price', periods=1) # column is lowercase
+target_series = create_target_regression(df, column='mid_price', periods=1)
 
 # --- 4. Align Features and Target ---
 # Drop any rows with NaN values that resulted from lagging or shifting
@@ -270,7 +269,7 @@ print(f"Gradient Boosting Model Metrics (Test Set): {gb_metrics}")
 # --- 7. Baseline Model Comparison ---
 print("\n--- Baseline Model (Naive Prediction) ---")
 # Generate baseline predictions for the entire dataset
-full_baseline_predictions = predict_baseline_mid_price(df, column='mid_price', periods=1) # column is lowercase
+full_baseline_predictions = predict_baseline_mid_price(df, column='mid_price', periods=1)
 # Align baseline predictions with the test set's target index
 y_baseline_pred = full_baseline_predictions.loc[y_test.index]
 

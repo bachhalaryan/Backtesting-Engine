@@ -34,5 +34,6 @@ if __name__ == "__main__":
         strategy_params=strategy_params,
         commission_calculator=commission_calculator,
         bars_from_end=10000,
+        resample_interval='1d'
     )
     backtester.simulate_trading(log_level=logging.INFO)

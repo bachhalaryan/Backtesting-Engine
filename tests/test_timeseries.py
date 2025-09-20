@@ -56,8 +56,8 @@ class TestTimeSeriesAnalysis(unittest.TestCase):
 
     def test_calculate_mid_price(self):
         df_with_ohlc = pd.DataFrame({
-            'high': [10, 12, 14, 16, 18],
-            'low': [8, 10, 12, 14, 16]
+            'High': [10, 12, 14, 16, 18],
+            'Low': [8, 10, 12, 14, 16]
         })
         mid_price = calculate_mid_price(df_with_ohlc)
         self.assertIsInstance(mid_price, pd.Series)
